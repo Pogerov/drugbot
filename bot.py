@@ -22,10 +22,10 @@ load_dotenv()
 # КОНФИГУРАЦИЯ
 # ============================================
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("8675008414:AAGHkl8Udcz9F4AhZfZCDV-idIS3I1lbcmI")
 ADMIN_ID = int(os.getenv("ADMIN_ID", 7753887058))
 CRYPTO_WALLET = os.getenv("CRYPTO_WALLET", "UQDRRRGutl_ccP25XcwbOK-RN2UXuvE1_GFoerlaIDvmwO7I")
-TON_API_KEY = os.getenv("TON_API_KEY")
+TON_API_KEY = os.getenv("4077e5a978e350fcc0faad1d128a41a1a15c64ededc541e3681d28332ac0507f")
 
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN не найден в .env файле!")
