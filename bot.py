@@ -6,12 +6,13 @@ from datetime import datetime, timedelta
 from typing import Dict, Tuple
 import aiohttp
 
-from aiogram import Bot, Dispatcher, F, types
-from aiogram.filters import Command
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram import Bot, Dispatcher, types
+from aiogram.contrib.middlewares.logging import LoggingMiddleware
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters import Command
+from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
+from aiogram.utils import executor
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from dotenv import load_dotenv
 
@@ -41,8 +42,8 @@ logger = logging.getLogger(__name__)
 
 # Инициализация бота
 bot = Bot(token=BOT_TOKEN)
-storage = MemoryStorage()
-dp = Dispatcher(storage=storage)
+dp = Dispatcher(bot)
+dp.middleware.setup(LoggingMiddleware())
 
 # ============================================
 # ДАННЫЕ
@@ -197,7 +198,7 @@ def get_user_chat_keyboard():
 # ОБРАБОТЧИКИ
 # ============================================
 
-@dp.message(Command("start"))
+@dp.message_handler(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
     user_id = message.from_user.id
     
@@ -222,9 +223,9 @@ async def cmd_start(message: Message, state: FSMContext):
         "Всех благ и хороших покупок."
     )
     await message.answer(welcome_text, reply_markup=get_main_keyboard())
-    await state.clear()
+    await state.finish()
 
-@dp.callback_query(F.data == "buy")
+@dp.callback_query_handler(lambda c: c.data == "buy")
 async def handle_buy(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     
@@ -236,7 +237,7 @@ async def handle_buy(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.set_state(PurchaseStates.selecting_product)
 
-@dp.callback_query(F.data == "profile")
+@dp.callback_query_handler(lambda c: c.data == "profile")
 async def handle_profile(callback: CallbackQuery):
     user_id = callback.from_user.id
     data = user_data.get(user_id, {"purchases_today": 0, "total_purchases": 0, "balance": 0})
@@ -254,7 +255,7 @@ async def handle_profile(callback: CallbackQuery):
     await callback.message.edit_text(profile_text, reply_markup=get_main_keyboard())
     await callback.answer()
 
-@dp.callback_query(F.data == "back_to_main")
+@dp.callback_query_handler(lambda c: c.data == "back_to_main")
 async def handle_back_to_main(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     if user_data[user_id].get("in_chat", False):
@@ -268,20 +269,20 @@ async def handle_back_to_main(callback: CallbackQuery, state: FSMContext):
         "Всех благ и хороших покупок."
     )
     await callback.message.edit_text(welcome_text, reply_markup=get_main_keyboard())
-    await state.clear()
+    await state.finish()
     await callback.answer()
 
-@dp.callback_query(F.data == "back_to_categories")
+@dp.callback_query_handler(lambda c: c.data == "back_to_categories")
 async def handle_back_to_categories(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text("Выберите категорию:", reply_markup=get_categories_keyboard())
     await callback.answer()
 
-@dp.callback_query(F.data == "back_to_products")
+@dp.callback_query_handler(lambda c: c.data == "back_to_products")
 async def handle_back_to_products(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text("Выберите категорию:", reply_markup=get_categories_keyboard())
     await callback.answer()
 
-@dp.callback_query(F.data.startswith("category_"))
+@dp.callback_query_handler(lambda c: c.data.startswith("category_"))
 async def handle_category(callback: CallbackQuery, state: FSMContext):
     category = callback.data.split("_")[1]
     category_map = {"salt": "соль", "cannabis": "каннибиноиды"}
@@ -293,7 +294,7 @@ async def handle_category(callback: CallbackQuery, state: FSMContext):
     )
     await callback.answer()
 
-@dp.callback_query(F.data.startswith("product_"))
+@dp.callback_query_handler(lambda c: c.data.startswith("product_"))
 async def handle_product(callback: CallbackQuery, state: FSMContext):
     product_key = callback.data.split("_")[1]
     product = PRODUCTS.get(product_key)
@@ -313,12 +314,12 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
     await state.set_state(PurchaseStates.selecting_dosage)
     await callback.answer()
 
-@dp.callback_query(F.data.startswith("dosage_up_"))
+@dp.callback_query_handler(lambda c: c.data.startswith("dosage_up_"))
 async def handle_dosage_up(callback: CallbackQuery, state: FSMContext):
     product_key = callback.data.split("_")[2]
     await update_dosage(callback, state, product_key, 1)
 
-@dp.callback_query(F.data.startswith("dosage_down_"))
+@dp.callback_query_handler(lambda c: c.data.startswith("dosage_down_"))
 async def handle_dosage_down(callback: CallbackQuery, state: FSMContext):
     product_key = callback.data.split("_")[2]
     await update_dosage(callback, state, product_key, -1)
@@ -338,7 +339,7 @@ async def update_dosage(callback: CallbackQuery, state: FSMContext, product_key:
     )
     await callback.answer()
 
-@dp.callback_query(F.data.startswith("confirm_purchase_"))
+@dp.callback_query_handler(lambda c: c.data.startswith("confirm_purchase_"))
 async def handle_confirm_purchase(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     product_key = callback.data.split("_")[2]
@@ -387,7 +388,7 @@ async def handle_confirm_purchase(callback: CallbackQuery, state: FSMContext):
     await state.set_state(PurchaseStates.waiting_for_payment)
     await callback.answer()
 
-@dp.callback_query(F.data == "check_payment")
+@dp.callback_query_handler(lambda c: c.data == "check_payment")
 async def handle_check_payment(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     
@@ -445,7 +446,7 @@ async def complete_purchase(callback: CallbackQuery, state: FSMContext, user_id:
     if user_id in pending_payments:
         del pending_payments[user_id]
     
-    await state.clear()
+    await state.finish()
     
     await callback.message.edit_text(
         f"✅ Спасибо за покупку!\n"
@@ -483,7 +484,7 @@ async def complete_purchase(callback: CallbackQuery, state: FSMContext, user_id:
 # ОБРАБОТКА ТИКЕТОВ
 # ============================================
 
-@dp.callback_query(F.data.startswith("accept_ticket_"))
+@dp.callback_query_handler(lambda c: c.data.startswith("accept_ticket_"))
 async def handle_accept_ticket(callback: CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("❌ У вас нет доступа!", show_alert=True)
@@ -525,7 +526,7 @@ async def handle_accept_ticket(callback: CallbackQuery):
     
     await callback.answer("✅ Тикет принят!")
 
-@dp.callback_query(F.data.startswith("close_ticket_"))
+@dp.callback_query_handler(lambda c: c.data.startswith("close_ticket_"))
 async def handle_close_ticket(callback: CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("❌ У вас нет доступа!", show_alert=True)
@@ -567,7 +568,7 @@ async def handle_close_ticket(callback: CallbackQuery):
     
     await callback.answer("✅ Тикет закрыт!")
 
-@dp.callback_query(F.data == "close_user_chat")
+@dp.callback_query_handler(lambda c: c.data == "close_user_chat")
 async def handle_close_user_chat(callback: CallbackQuery):
     user_id = callback.from_user.id
     
@@ -593,7 +594,7 @@ async def handle_close_user_chat(callback: CallbackQuery):
 # СООБЩЕНИЯ В ЧАТЕ
 # ============================================
 
-@dp.message(F.text | F.photo | F.location)
+@dp.message_handler(content_types=['text', 'photo', 'location'])
 async def handle_chat_messages(message: Message, state: FSMContext):
     user_id = message.from_user.id
     
@@ -681,7 +682,7 @@ def check_purchase_limit(user_id: int) -> bool:
 # ЗАПУСК
 # ============================================
 
-async def main():
+async def on_startup(dp):
     logger.info("🚀 Бот запускается...")
     
     try:
@@ -691,7 +692,6 @@ async def main():
         logger.error(f"❌ Ошибка TON: {e}")
     
     logger.info("✅ Бот готов!")
-    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    executor.start_polling(dp, on_startup=on_startup, skip_updates=True)
