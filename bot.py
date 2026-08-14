@@ -24,7 +24,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 # КОНФИГУРАЦИЯ
 # ============================================
 
-BOT_TOKEN = "ВАШ_ТОКЕН_БОТА"  # Замените на реальный токен от @BotFather
+BOT_TOKEN = "8675008414:AAGHkl8Udcz9F4AhZfZCDV-idIS3I1lbcmI"  # Замените на реальный токен от @BotFather
 ADMIN_ID = 7753887058  # Ваш Telegram ID
 CRYPTO_WALLET = "UQDRRRGutl_ccP25XcwbOK-RN2UXuvE1_GFoerlaIDvmwO7I"  # Ваш кошелек
 TON_API_KEY = "4077e5a978e350fcc0faad1d128a41a1a15c64ededc541e3681d28332ac0507f"  # Ваш API ключ
