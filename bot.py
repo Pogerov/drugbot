@@ -118,6 +118,15 @@ class TonHandler:
 ton_handler = TonHandler(CRYPTO_WALLET, TON_API_KEY)
 
 # ============================================
+# ФУНКЦИЯ РАСЧЕТА ЦЕНЫ
+# ============================================
+
+def calculate_price(base_price: float, dosage: int) -> float:
+    if dosage <= 1:
+        return base_price
+    return base_price * (1.25 ** (dosage - 1))
+
+# ============================================
 # КЛАВИАТУРЫ
 # ============================================
 
@@ -183,15 +192,6 @@ def get_user_chat_keyboard():
     keyboard = InlineKeyboardMarkup(row_width=1)
     keyboard.add(InlineKeyboardButton(text="❌ Закрыть чат", callback_data="close_user_chat"))
     return keyboard
-
-# ============================================
-# ФУНКЦИЯ РАСЧЕТА ЦЕНЫ
-# ============================================
-
-def calculate_price(base_price: float, dosage: int) -> float:
-    if dosage == 1:
-        return base_price
-    return base_price * (1.25 ** (dosage - 1))
 
 # ============================================
 # ОБРАБОТЧИКИ
@@ -317,14 +317,15 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
         f"Цена за 1 грамм: {product['price']} GRAM\n"
         f"Цена за {dosage}г: {price:.2f} GRAM\n"
         f"━━━━━━━━━━━━━━━━\n"
-        f"Измените дозировку (макс. 50г) и нажмите 'Купить'",
+        f"Выберите дозировку от 1 до 50 грамм\n"
+        f"━━━━━━━━━━━━━━━━",
         reply_markup=get_dosage_keyboard(product_key, dosage, price)
     )
     await state.set_state(PurchaseStates.selecting_dosage)
     await callback.answer()
 
 # ============================================
-# ОБРАБОТЧИКИ ДОЗИРОВКИ (ИСПРАВЛЕННЫЕ)
+# УПРАВЛЕНИЕ ДОЗИРОВКОЙ — ГЛАВНОЕ ИСПРАВЛЕНИЕ
 # ============================================
 
 @dp.callback_query_handler(lambda c: c.data.startswith("dosage_up_"))
@@ -338,61 +339,71 @@ async def handle_dosage_down(callback: CallbackQuery, state: FSMContext):
     await update_dosage(callback, state, product_key, -1)
 
 async def update_dosage(callback: CallbackQuery, state: FSMContext, product_key: str, delta: int):
-    # Получаем текущие данные из состояния
+    # Получаем данные из состояния
     data = await state.get_data()
     
-    # Берем текущую дозировку, если нет — стартуем с 1
+    # Текущая дозировка (по умолчанию 1)
     current_dosage = data.get("dosage", 1)
     base_price = data.get("base_price", PRODUCTS[product_key]["price"])
     
-    # Рассчитываем новую дозировку (от 1 до 50)
+    # Рассчитываем новую дозировку
     new_dosage = current_dosage + delta
+    
+    # ЖЕСТКИЕ ГРАНИЦЫ: от 1 до 50
     if new_dosage < 1:
-        new_dosage = 1
-    elif new_dosage > 50:
-        new_dosage = 50
-        await callback.answer("❌ Максимум 50 грамм!", show_alert=True)
+        await callback.answer("❌ Минимальная дозировка — 1 грамм!", show_alert=True)
         return
     
-    # Пересчитываем цену
+    if new_dosage > 50:
+        await callback.answer("❌ Максимальная дозировка — 50 грамм!", show_alert=True)
+        return
+    
+    # Пересчет цены
     new_price = calculate_price(base_price, new_dosage)
     
-    # ОБНОВЛЯЕМ состояние
+    # ✅ СОХРАНЯЕМ В СОСТОЯНИЕ
     await state.update_data(
         dosage=new_dosage,
         price=new_price,
         base_price=base_price
     )
     
-    # Получаем название продукта
+    # Обновляем сообщение
     product_name = PRODUCTS[product_key]["name"]
     product_emoji = PRODUCTS[product_key]["emoji"]
     
-    # Обновляем текст сообщения
     await callback.message.edit_text(
         f"{product_emoji} Отлично! Вы покупаете {product_name}!\n"
         f"Цена за 1 грамм: {base_price} GRAM\n"
         f"Цена за {new_dosage}г: {new_price:.2f} GRAM\n"
         f"━━━━━━━━━━━━━━━━\n"
-        f"Измените дозировку (макс. 50г) и нажмите 'Купить'",
+        f"Выберите дозировку от 1 до 50 грамм\n"
+        f"━━━━━━━━━━━━━━━━",
         reply_markup=get_dosage_keyboard(product_key, new_dosage, new_price)
     )
     
     await callback.answer()
 
 # ============================================
-# ОСТАЛЬНЫЕ ОБРАБОТЧИКИ (БЕЗ ИЗМЕНЕНИЙ)
+# ПОДТВЕРЖДЕНИЕ ПОКУПКИ
 # ============================================
 
 @dp.callback_query_handler(lambda c: c.data.startswith("confirm_purchase_"))
 async def handle_confirm_purchase(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     product_key = callback.data.split("_")[2]
+    
+    # Загружаем данные из состояния
     data = await state.get_data()
     
-    product = PRODUCTS[product_key]
+    # Берем ДОЗИРОВКУ и ЦЕНУ из состояния
     dosage = data.get("dosage", 1)
-    price = data.get("price", product["price"])
+    price = data.get("price", PRODUCTS[product_key]["price"])
+    
+    # Логируем для проверки
+    logger.info(f"✅ ПОКУПКА: {product_key}, дозировка: {dosage}, цена: {price}")
+    
+    product = PRODUCTS[product_key]
     
     if not check_purchase_limit(user_id):
         await callback.answer("❌ Достигнут лимит покупок на сегодня!", show_alert=True)
@@ -432,6 +443,10 @@ async def handle_confirm_purchase(callback: CallbackQuery, state: FSMContext):
     )
     await state.set_state(PurchaseStates.waiting_for_payment)
     await callback.answer()
+
+# ============================================
+# ОСТАЛЬНЫЕ ОБРАБОТЧИКИ
+# ============================================
 
 @dp.callback_query_handler(lambda c: c.data == "check_payment")
 async def handle_check_payment(callback: CallbackQuery, state: FSMContext):
