@@ -15,7 +15,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQu
 from aiogram.utils import executor
 
 # ============================================
-# КОНФИГУРАЦИЯ (БЕЗ ПРОВЕРОК)
+# КОНФИГУРАЦИЯ
 # ============================================
 
 BOT_TOKEN = "8675008414:AAEQTT86DAEGBImQ33dAeIjjwQLQGlOKjvE"
@@ -187,6 +187,16 @@ def get_user_chat_keyboard():
     return keyboard
 
 # ============================================
+# ФУНКЦИЯ РАСЧЕТА ЦЕНЫ
+# ============================================
+
+def calculate_price(base_price: float, dosage: int) -> float:
+    """Рассчет цены с коэффициентом x1.25 за каждый дополнительный грамм"""
+    if dosage == 1:
+        return base_price
+    return base_price * (1.25 ** (dosage - 1))
+
+# ============================================
 # ОБРАБОТЧИКИ
 # ============================================
 
@@ -295,13 +305,24 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Товар не найден!", show_alert=True)
         return
     
-    await state.update_data(product_key=product_key, dosage=1, price=product["price"])
+    # Инициализация: дозировка 1, цена базовая
+    dosage = 1
+    price = calculate_price(product["price"], dosage)
+    
+    await state.update_data(
+        product_key=product_key,
+        dosage=dosage,
+        price=price,
+        base_price=product["price"]
+    )
     
     await callback.message.edit_text(
         f"{product['emoji']} Отлично! Вы покупаете {product['name']}!\n"
-        f"Стоимость: {product['price']} GRAM за 1 грамм\n"
-        f"Измените дозировку и нажмите 'Купить'",
-        reply_markup=get_dosage_keyboard(product_key, 1, product['price'])
+        f"Цена за 1 грамм: {product['price']} GRAM\n"
+        f"Цена за {dosage}г: {price:.2f} GRAM\n"
+        f"━━━━━━━━━━━━━━━━\n"
+        f"Измените дозировку (макс. 50г) и нажмите 'Купить'",
+        reply_markup=get_dosage_keyboard(product_key, dosage, price)
     )
     await state.set_state(PurchaseStates.selecting_dosage)
     await callback.answer()
@@ -319,16 +340,33 @@ async def handle_dosage_down(callback: CallbackQuery, state: FSMContext):
 async def update_dosage(callback: CallbackQuery, state: FSMContext, product_key: str, delta: int):
     data = await state.get_data()
     current_dosage = data.get("dosage", 1)
-    base_price = PRODUCTS[product_key]["price"]
+    base_price = data.get("base_price", PRODUCTS[product_key]["price"])
     
-    new_dosage = max(1, current_dosage + delta)
-    new_price = base_price * (1.25 ** (new_dosage - 1))
+    # Новый диапазон: от 1 до 50
+    new_dosage = max(1, min(50, current_dosage + delta))
     
+    # Пересчет цены
+    new_price = calculate_price(base_price, new_dosage)
+    
+    # Обновление данных состояния
     await state.update_data(dosage=new_dosage, price=new_price)
     
+    # Обновление клавиатуры
     await callback.message.edit_reply_markup(
         reply_markup=get_dosage_keyboard(product_key, new_dosage, new_price)
     )
+    
+    # Обновление текста с новой ценой
+    product_name = PRODUCTS[product_key]["name"]
+    await callback.message.edit_text(
+        f"{PRODUCTS[product_key]['emoji']} Отлично! Вы покупаете {product_name}!\n"
+        f"Цена за 1 грамм: {base_price} GRAM\n"
+        f"Цена за {new_dosage}г: {new_price:.2f} GRAM\n"
+        f"━━━━━━━━━━━━━━━━\n"
+        f"Измените дозировку (макс. 50г) и нажмите 'Купить'",
+        reply_markup=get_dosage_keyboard(product_key, new_dosage, new_price)
+    )
+    
     await callback.answer()
 
 @dp.callback_query_handler(lambda c: c.data.startswith("confirm_purchase_"))
@@ -339,7 +377,7 @@ async def handle_confirm_purchase(callback: CallbackQuery, state: FSMContext):
     
     product = PRODUCTS[product_key]
     dosage = data.get("dosage", 1)
-    price = data.get("price", product["price"])
+    price = data.get("price", product["price"])  # Берем актуальную цену из состояния
     
     if not check_purchase_limit(user_id):
         await callback.answer("❌ Достигнут лимит покупок на сегодня!", show_alert=True)
