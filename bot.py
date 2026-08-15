@@ -15,18 +15,13 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQu
 from aiogram.utils import executor
 
 # ============================================
-# КОНФИГУРАЦИЯ (БЕЗ .env — берём из переменных окружения Render)
+# КОНФИГУРАЦИЯ (БЕЗ ПРОВЕРОК)
 # ============================================
 
-BOT_TOKEN = os.environ.get("8675008414:AAEQTT86DAEGBImQ33dAeIjjwQLQGlOKjvE")
-ADMIN_ID = int(os.environ.get("ADMIN_ID", 7753887058))
-CRYPTO_WALLET = os.environ.get("CRYPTO_WALLET", "UQDRRRGutl_ccP25XcwbOK-RN2UXuvE1_GFoerlaIDvmwO7I")
-TON_API_KEY = os.environ.get("4077e5a978e350fcc0faad1d128a41a1a15c64ededc541e3681d28332ac0507f")
-
-if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN не найден в переменных окружения!")
-if not TON_API_KEY:
-    raise ValueError("TON_API_KEY не найден в переменных окружения!")
+BOT_TOKEN = "8675008414:AAEQTT86DAEGBImQ33dAeIjjwQLQGlOKjvE"
+ADMIN_ID = 7753887058
+CRYPTO_WALLET = "UQDRRRGutl_ccP25XcwbOK-RN2UXuvE1_GFoerlaIDvmwO7I"
+TON_API_KEY = "4077e5a978e350fcc0faad1d128a41a1a15c64ededc541e3681d28332ac0507f"
 
 # Настройка логирования
 logging.basicConfig(
