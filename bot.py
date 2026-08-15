@@ -122,6 +122,7 @@ ton_handler = TonHandler(CRYPTO_WALLET, TON_API_KEY)
 # ============================================
 
 def calculate_price(base_price: float, dosage: int) -> float:
+    """Расчет цены с коэффициентом 1.25 за каждый грамм"""
     if dosage <= 1:
         return base_price
     return base_price * (1.25 ** (dosage - 1))
@@ -159,6 +160,7 @@ def get_products_keyboard(category: str):
     return keyboard
 
 def get_dosage_keyboard(product_key: str, dosage: int, price: float):
+    """Клавиатура с дозировкой — БЕЗ ОГРАНИЧЕНИЙ"""
     keyboard = InlineKeyboardMarkup(row_width=3)
     keyboard.row(
         InlineKeyboardButton(text="➖", callback_data=f"dosage_down_{product_key}"),
@@ -325,7 +327,7 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 # ============================================
-# УПРАВЛЕНИЕ ДОЗИРОВКОЙ — ГЛАВНОЕ ИСПРАВЛЕНИЕ
+# УПРАВЛЕНИЕ ДОЗИРОВКОЙ — ИСПРАВЛЕННАЯ ВЕРСИЯ
 # ============================================
 
 @dp.callback_query_handler(lambda c: c.data.startswith("dosage_up_"))
@@ -342,31 +344,34 @@ async def update_dosage(callback: CallbackQuery, state: FSMContext, product_key:
     # Получаем данные из состояния
     data = await state.get_data()
     
-    # Текущая дозировка (по умолчанию 1)
+    # Текущая дозировка
     current_dosage = data.get("dosage", 1)
     base_price = data.get("base_price", PRODUCTS[product_key]["price"])
     
-    # Рассчитываем новую дозировку
+    # Новая дозировка — БЕЗ ОГРАНИЧЕНИЙ
     new_dosage = current_dosage + delta
     
-    # ЖЕСТКИЕ ГРАНИЦЫ: от 1 до 50
+    # Единственные ограничения: минимум 1, максимум 50
     if new_dosage < 1:
-        await callback.answer("❌ Минимальная дозировка — 1 грамм!", show_alert=True)
+        await callback.answer("❌ Минимум 1 грамм!", show_alert=True)
         return
     
     if new_dosage > 50:
-        await callback.answer("❌ Максимальная дозировка — 50 грамм!", show_alert=True)
+        await callback.answer("❌ Максимум 50 грамм!", show_alert=True)
         return
     
     # Пересчет цены
     new_price = calculate_price(base_price, new_dosage)
     
-    # ✅ СОХРАНЯЕМ В СОСТОЯНИЕ
+    # ✅ ЯВНОЕ ОБНОВЛЕНИЕ СОСТОЯНИЯ
     await state.update_data(
         dosage=new_dosage,
         price=new_price,
         base_price=base_price
     )
+    
+    # Логируем для отладки
+    logger.info(f"Дозировка: {new_dosage}, цена: {new_price}")
     
     # Обновляем сообщение
     product_name = PRODUCTS[product_key]["name"]
