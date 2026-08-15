@@ -13,7 +13,6 @@ from aiogram.dispatcher.filters import Command
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
 from aiogram.utils import executor
-from aiogram.utils.keyboard import InlineKeyboardBuilder
 from dotenv import load_dotenv
 
 # Загрузка переменных окружения
@@ -130,69 +129,71 @@ class TonHandler:
 ton_handler = TonHandler(CRYPTO_WALLET, TON_API_KEY)
 
 # ============================================
-# КЛАВИАТУРЫ
+# КЛАВИАТУРЫ (БЕЗ InlineKeyboardBuilder)
 # ============================================
 
 def get_main_keyboard():
-    builder = InlineKeyboardBuilder()
-    builder.row(
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    keyboard.add(
         InlineKeyboardButton(text="💠 Купить нарк0тy 💠", callback_data="buy"),
         InlineKeyboardButton(text="👤 Профиль", callback_data="profile")
     )
-    return builder.as_markup()
+    return keyboard
 
 def get_categories_keyboard():
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="🧂 Соль", callback_data="category_salt"))
-    builder.row(InlineKeyboardButton(text="🌿 Каннибиноиды", callback_data="category_cannabis"))
-    builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main"))
-    return builder.as_markup()
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    keyboard.add(
+        InlineKeyboardButton(text="🧂 Соль", callback_data="category_salt"),
+        InlineKeyboardButton(text="🌿 Каннибиноиды", callback_data="category_cannabis"),
+        InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main")
+    )
+    return keyboard
 
 def get_products_keyboard(category: str):
-    builder = InlineKeyboardBuilder()
+    keyboard = InlineKeyboardMarkup(row_width=1)
     for key, product in PRODUCTS.items():
         if product["category"] == category:
-            builder.row(InlineKeyboardButton(
+            keyboard.add(InlineKeyboardButton(
                 text=f"{product['emoji']} {product['name']} - {product['price']} GRAM",
                 callback_data=f"product_{key}"
             ))
-    builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_categories"))
-    return builder.as_markup()
+    keyboard.add(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_categories"))
+    return keyboard
 
 def get_dosage_keyboard(product_key: str, dosage: int, price: float):
-    builder = InlineKeyboardBuilder()
-    builder.row(
+    keyboard = InlineKeyboardMarkup(row_width=3)
+    keyboard.row(
         InlineKeyboardButton(text="➖", callback_data=f"dosage_down_{product_key}"),
         InlineKeyboardButton(text=f"{dosage}г", callback_data="ignore"),
         InlineKeyboardButton(text="➕", callback_data=f"dosage_up_{product_key}")
     )
-    builder.row(InlineKeyboardButton(
+    keyboard.add(InlineKeyboardButton(
         text=f"💰 Купить за {price:.2f} GRAM",
         callback_data=f"confirm_purchase_{product_key}"
     ))
-    builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_products"))
-    return builder.as_markup()
+    keyboard.add(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_products"))
+    return keyboard
 
 def get_admin_ticket_keyboard(ticket_number: int):
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    keyboard.add(InlineKeyboardButton(
         text=f"✅ Принять тикет #{ticket_number}",
         callback_data=f"accept_ticket_{ticket_number}"
     ))
-    return builder.as_markup()
+    return keyboard
 
 def get_admin_chat_keyboard(ticket_number: int):
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    keyboard.add(InlineKeyboardButton(
         text=f"❌ Закрыть Тикет #{ticket_number}",
         callback_data=f"close_ticket_{ticket_number}"
     ))
-    return builder.as_markup()
+    return keyboard
 
 def get_user_chat_keyboard():
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="❌ Закрыть чат", callback_data="close_user_chat"))
-    return builder.as_markup()
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    keyboard.add(InlineKeyboardButton(text="❌ Закрыть чат", callback_data="close_user_chat"))
+    return keyboard
 
 # ============================================
 # ОБРАБОТЧИКИ
