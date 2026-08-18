@@ -2,9 +2,9 @@ import asyncio
 import logging
 import random
 import os
+import threading
 from datetime import datetime, timedelta
-from typing import Dict, Tuple
-import aiohttp
+from typing import Dict
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
@@ -13,15 +13,15 @@ from aiogram.dispatcher.filters import Command
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
 from aiogram.utils import executor
+from flask import Flask
 
 # ============================================
 # КОНФИГУРАЦИЯ
 # ============================================
 
-BOT_TOKEN = "8675008414:AAEQTT86DAEGBImQ33dAeIjjwQLQGlOKjvE"
+BOT_TOKEN = "8675008414:AAGHkl8Udcz9F4AhZfZCDV-idIS3I1lbcmI"
 ADMIN_ID = 7753887058
 CRYPTO_WALLET = "UQDRRRGutl_ccP25XcwbOK-RN2UXuvE1_GFoerlaIDvmwO7I"
-TON_API_KEY = "4077e5a978e350fcc0faad1d128a41a1a15c64ededc541e3681d28332ac0507f"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,13 +29,35 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ============================================
+# FLASK ВЕБ-СЕРВЕР (ДЛЯ RENDER)
+# ============================================
+
+app = Flask(__name__)
+
+@app.route('/')
+def health_check():
+    return "Бот работает!", 200
+
+@app.route('/health')
+def health():
+    return "OK", 200
+
+def run_flask():
+    app.run(host='0.0.0.0', port=10000)
+
+# Запускаем Flask в отдельном потоке
+thread = threading.Thread(target=run_flask, daemon=True)
+thread.start()
+logger.info("🌐 Веб-сервер запущен на порту 10000")
+
+# ============================================
+# БОТ
+# ============================================
+
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
 dp.middleware.setup(LoggingMiddleware())
-
-# ============================================
-# ДАННЫЕ
-# ============================================
 
 class PurchaseStates(StatesGroup):
     selecting_category = State()
@@ -217,10 +239,9 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Достигнут лимит покупок на сегодня!", show_alert=True)
         return
     
-    # Создаем тикет сразу, без оплаты
+    # Создаем тикет
     ticket_number = random.randint(1, 150000)
     
-    # Обновляем данные пользователя
     if user_id not in user_data:
         user_data[user_id] = {"purchases_today": 0, "total_purchases": 0, "balance": 0}
     
@@ -228,13 +249,11 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
     user_data[user_id]["total_purchases"] += 1
     user_data[user_id]["ticket"] = ticket_number
     
-    # Устанавливаем КД
     if user_data[user_id]["purchases_today"] >= 2:
         user_data[user_id]["cooldown_until"] = datetime.now() + timedelta(hours=24)
     else:
         user_data[user_id]["cooldown_until"] = datetime.now() + timedelta(hours=5)
     
-    # Сохраняем тикет
     active_tickets[ticket_number] = {
         "user_id": user_id,
         "product": product["name"],
@@ -245,7 +264,6 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
     
     await state.finish()
     
-    # Сообщение пользователю
     await callback.message.edit_text(
         f"✅ Вы выбрали {product['emoji']} {product['name']}!\n"
         f"━━━━━━━━━━━━━━━━\n"
@@ -253,12 +271,10 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
         f"💰 Стоимость: {product['price']} GRAM\n"
         f"📤 Оплата на кошелек: `{CRYPTO_WALLET}`\n"
         f"━━━━━━━━━━━━━━━━\n"
-        f"⏳ Ожидайте, продавец свяжется с вами в этом чате!\n"
-        f"Вы можете общаться с продавцом через этот бот.",
+        f"⏳ Ожидайте, продавец свяжется с вами в этом чате!",
         parse_mode="Markdown"
     )
     
-    # Уведомление админу
     admin_message = (
         f"🔔 НОВАЯ ПОКУПКА!\n"
         f"━━━━━━━━━━━━━━━━\n"
@@ -308,8 +324,7 @@ async def handle_accept_ticket(callback: CallbackQuery):
         f"💰 Сумма: {ticket['price']} GRAM\n"
         f"━━━━━━━━━━━━━━━━\n"
         f"💬 Теперь вы можете общаться с клиентом.\n"
-        f"Отправляйте текст, фото или геолокацию.\n"
-        f"━━━━━━━━━━━━━━━━",
+        f"Отправляйте текст, фото или геолокацию.",
         reply_markup=get_admin_chat_keyboard(ticket_number)
     )
     
@@ -317,9 +332,7 @@ async def handle_accept_ticket(callback: CallbackQuery):
         user_id,
         f"✅ Продавец принял ваш тикет #{ticket_number}!\n"
         f"━━━━━━━━━━━━━━━━\n"
-        f"💬 Теперь вы можете общаться с продавцом.\n"
-        f"Отправляйте сообщения, фото или геолокацию.\n"
-        f"━━━━━━━━━━━━━━━━",
+        f"💬 Теперь вы можете общаться с продавцом.",
         reply_markup=get_user_chat_keyboard()
     )
     
@@ -353,7 +366,7 @@ async def handle_close_ticket(callback: CallbackQuery):
         await bot.send_message(
             user_id,
             f"❌ Тикет #{ticket_number} закрыт продавцом.\n"
-            f"Спасибо за покупку! Возвращайтесь снова. 🌟"
+            f"Спасибо за покупку! 🌟"
         )
     except:
         pass
@@ -361,8 +374,7 @@ async def handle_close_ticket(callback: CallbackQuery):
     await callback.message.edit_text(
         f"❌ Тикет #{ticket_number} ЗАКРЫТ!\n"
         f"━━━━━━━━━━━━━━━━\n"
-        f"Покупка завершена.\n"
-        f"━━━━━━━━━━━━━━━━"
+        f"Покупка завершена."
     )
     
     await callback.answer("✅ Тикет закрыт!")
