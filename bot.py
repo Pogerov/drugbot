@@ -19,7 +19,7 @@ from flask import Flask
 # КОНФИГУРАЦИЯ
 # ============================================
 
-BOT_TOKEN = "8675008414:AAGHkl8Udcz9F4AhZfZCDV-idIS3I1lbcmI"
+BOT_TOKEN = "8675008414:AAEQTT86DAEGBImQ33dAeIjjwQLQGlOKjvE"
 ADMIN_ID = 7753887058
 CRYPTO_WALLET = "UQDRRRGutl_ccP25XcwbOK-RN2UXuvE1_GFoerlaIDvmwO7I"
 
