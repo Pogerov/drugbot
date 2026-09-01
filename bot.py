@@ -19,16 +19,16 @@ from aiogram.utils import executor
 from flask import Flask
 
 # ============================================
-# КОНФИГУРАЦИЯ (ОСНОВНОЙ БОТ)
+# КОНФИГУРАЦИЯ
 # ============================================
 
-BOT_TOKEN = "8997465806:AAEPCdj2o2GmeRlnBzUJTG2qYDTwxt0ARXk"  # ЗАМЕНИТЕ НА ВАШ ТОКЕН!
+BOT_TOKEN = "8997465806:AAEPCdj2o2GmeRlnBzUJTG2qYDTwxt0ARXk"
 ADMIN_ID = 7753887058
 CRYPTO_WALLET = "UQDRRRGutl_ccP25XcwbOK-RN2UXuvE1_GFoerlaIDvmwO7I"
 BOT_USERNAME = "dfsddfagas_bot"
 
 # ============================================
-# РАСПОЗНАВАНИЕ РЕЖИМА
+# РЕЖИМ БОТА
 # ============================================
 
 IS_MIRROR = False
@@ -39,13 +39,12 @@ if len(sys.argv) > 1 and sys.argv[1] == "--mirror":
         with open("mirror_config.json", "r") as f:
             config = json.load(f)
             MIRROR_TOKEN = config["token"]
-            MAIN_BOT_ID = config["main_bot_id"]
     except:
         print("❌ Ошибка загрузки конфигурации зеркала!")
         sys.exit(1)
 
 # ============================================
-# НАСТРОЙКА ЛОГИРОВАНИЯ
+# НАСТРОЙКА
 # ============================================
 
 logging.basicConfig(
@@ -55,7 +54,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ============================================
-# ЗАПУСК FLASK (ТОЛЬКО ДЛЯ ОСНОВНОГО БОТА)
+# FLASK
 # ============================================
 
 if not IS_MIRROR:
@@ -107,14 +106,14 @@ PRODUCTS = {
 
 user_data: Dict[int, Dict] = {}
 active_tickets: Dict[int, Dict] = {}
-referral_data: Dict[int, Dict] = {}
 mirrors: Dict[int, Dict] = {}
+referral_data: Dict[int, Dict] = {}
 
 current_admin_chat: Optional[int] = None
 current_admin_user: Optional[int] = None
 
 # ============================================
-# РЕФЕРАЛЬНАЯ СИСТЕМА (БЕЗ БОНУСОВ)
+# РЕФЕРАЛЬНАЯ СИСТЕМА
 # ============================================
 
 def generate_referral_link(user_id: int) -> str:
@@ -128,7 +127,7 @@ def get_user_id_from_ref_code(ref_code: str) -> Optional[int]:
     return None
 
 # ============================================
-# ФУНКЦИЯ ПРОВЕРКИ ТОКЕНА
+# ПРОВЕРКА ТОКЕНА
 # ============================================
 
 async def check_token_valid(token: str) -> tuple:
@@ -140,16 +139,12 @@ async def check_token_valid(token: str) -> tuple:
         return False, None
 
 # ============================================
-# ФУНКЦИЯ ЗАПУСКА ЗЕРКАЛА
+# ЗАПУСК ЗЕРКАЛА
 # ============================================
 
-def start_mirror_bot(token: str, username: str, main_bot_id: int):
+def start_mirror_bot(token: str, username: str):
     try:
-        config = {
-            "token": token,
-            "main_bot_id": main_bot_id
-        }
-        
+        config = {"token": token}
         with open("mirror_config.json", "w") as f:
             json.dump(config, f)
         
@@ -166,6 +161,28 @@ def start_mirror_bot(token: str, username: str, main_bot_id: int):
     except Exception as e:
         logger.error(f"Ошибка запуска зеркала: {e}")
         return None
+
+# ============================================
+# АВТОМАТИЧЕСКАЯ РЕГИСТРАЦИЯ
+# ============================================
+
+def auto_register(user_id: int):
+    if user_id not in user_data:
+        user_data[user_id] = {
+            "purchases_today": 0,
+            "cooldown_until": None,
+            "balance": 0.0,
+            "total_purchases": 0,
+            "ticket": None,
+            "in_chat": False,
+            "ref_code": hashlib.md5(str(user_id).encode()).hexdigest()[:8],
+            "invited_users": 0
+        }
+        referral_data[user_id] = {
+            "ref_code": user_data[user_id]["ref_code"],
+            "ref_link": generate_referral_link(user_id),
+            "invited_users": 0
+        }
 
 # ============================================
 # КЛАВИАТУРЫ
@@ -229,7 +246,7 @@ def get_back_keyboard():
     return keyboard
 
 # ============================================
-# ФУНКЦИЯ УДАЛЕНИЯ ЧАТА
+# УДАЛЕНИЕ ЧАТА
 # ============================================
 
 async def delete_chat_messages(user_id: int):
@@ -251,7 +268,7 @@ async def delete_chat_messages(user_id: int):
         logger.error(f"Ошибка при удалении сообщений: {e}")
 
 # ============================================
-# ОБРАБОТЧИКИ ДЛЯ ВСЕХ
+# ОБРАБОТЧИКИ
 # ============================================
 
 @dp.message_handler(Command("start"))
@@ -259,24 +276,7 @@ async def cmd_start(message: Message, state: FSMContext):
     user_id = message.from_user.id
     args = message.get_args()
     
-    if user_id not in user_data:
-        user_data[user_id] = {
-            "purchases_today": 0,
-            "cooldown_until": None,
-            "balance": 0.0,
-            "total_purchases": 0,
-            "ticket": None,
-            "in_chat": False
-        }
-        
-        if not IS_MIRROR:
-            user_data[user_id]["ref_code"] = hashlib.md5(str(user_id).encode()).hexdigest()[:8]
-            user_data[user_id]["invited_users"] = 0
-            referral_data[user_id] = {
-                "ref_code": user_data[user_id]["ref_code"],
-                "ref_link": generate_referral_link(user_id),
-                "invited_users": 0
-            }
+    auto_register(user_id)
     
     if not IS_MIRROR and args and args.startswith("ref_"):
         ref_code = args[4:]
@@ -311,6 +311,7 @@ async def cmd_start(message: Message, state: FSMContext):
 @dp.callback_query_handler(lambda c: c.data == "buy")
 async def handle_buy(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
+    auto_register(user_id)
     
     if not check_cooldown(user_id):
         await callback.answer("⚠️ У вас активен кулдаун!", show_alert=True)
@@ -323,6 +324,8 @@ async def handle_buy(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query_handler(lambda c: c.data == "profile")
 async def handle_profile(callback: CallbackQuery):
     user_id = callback.from_user.id
+    auto_register(user_id)
+    
     data = user_data.get(user_id, {"purchases_today": 0, "total_purchases": 0, "balance": 0})
     
     profile_text = (
@@ -345,7 +348,7 @@ async def handle_profile(callback: CallbackQuery):
     await callback.answer()
 
 # ============================================
-# ОБРАБОТЧИКИ ТОЛЬКО ДЛЯ ОСНОВНОГО БОТА
+# ТОЛЬКО ДЛЯ ОСНОВНОГО БОТА
 # ============================================
 
 if not IS_MIRROR:
@@ -353,10 +356,7 @@ if not IS_MIRROR:
     @dp.callback_query_handler(lambda c: c.data == "referral")
     async def handle_referral(callback: CallbackQuery):
         user_id = callback.from_user.id
-        
-        if user_id not in user_data:
-            await callback.answer("❌ Ошибка! Напишите /start", show_alert=True)
-            return
+        auto_register(user_id)
         
         ref_link = generate_referral_link(user_id)
         invited = user_data[user_id].get("invited_users", 0)
@@ -376,6 +376,7 @@ if not IS_MIRROR:
     @dp.callback_query_handler(lambda c: c.data == "mirror")
     async def handle_mirror(callback: CallbackQuery, state: FSMContext):
         user_id = callback.from_user.id
+        auto_register(user_id)
         
         user_mirrors = mirrors.get(user_id, {})
         if len(user_mirrors) >= 10:
@@ -413,7 +414,7 @@ if not IS_MIRROR:
             )
             return
         
-        process = start_mirror_bot(token, username, ADMIN_ID)
+        process = start_mirror_bot(token, username)
         
         if process is None:
             await message.answer(
@@ -447,10 +448,19 @@ if not IS_MIRROR:
             reply_markup=get_main_keyboard()
         )
         
+        await bot.send_message(
+            ADMIN_ID,
+            f"🪞 НОВОЕ ЗЕРКАЛО!\n"
+            f"━━━━━━━━━━━━━━━━\n"
+            f"👤 Создал: {user_id}\n"
+            f"🤖 Бот: @{username}\n"
+            f"📅 Создан: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        )
+        
         await state.finish()
 
 # ============================================
-# ОБРАБОТЧИКИ ПОКУПОК
+# ПОКУПКИ
 # ============================================
 
 @dp.callback_query_handler(lambda c: c.data == "back_to_main")
@@ -491,6 +501,8 @@ async def handle_category(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query_handler(lambda c: c.data.startswith("product_"))
 async def handle_product(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
+    auto_register(user_id)
+    
     product_key = callback.data.split("_")[1]
     product = PRODUCTS.get(product_key)
     
@@ -575,7 +587,7 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
     await callback.answer("✅ Тикет создан!")
 
 # ============================================
-# ОБРАБОТЧИКИ АДМИНА (ТОЛЬКО ДЛЯ ОСНОВНОГО БОТА)
+# АДМИН
 # ============================================
 
 if not IS_MIRROR:
@@ -688,7 +700,7 @@ if not IS_MIRROR:
         await callback.answer("✅ Тикет закрыт!")
 
 # ============================================
-# ЗАКРЫТИЕ ЧАТА ПОЛЬЗОВАТЕЛЕМ
+# ЗАКРЫТИЕ ЧАТА
 # ============================================
 
 @dp.callback_query_handler(lambda c: c.data == "close_user_chat")
@@ -720,7 +732,7 @@ async def handle_close_user_chat(callback: CallbackQuery):
     await callback.answer()
 
 # ============================================
-# СООБЩЕНИЯ В ЧАТЕ (ТОЛЬКО ДЛЯ ОСНОВНОГО БОТА)
+# ЧАТ
 # ============================================
 
 if not IS_MIRROR:
@@ -779,7 +791,7 @@ if not IS_MIRROR:
                 await message.answer("❌ Ошибка отправки")
 
 # ============================================
-# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# ВСПОМОГАТЕЛЬНЫЕ
 # ============================================
 
 def check_cooldown(user_id: int) -> bool:
