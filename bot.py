@@ -22,10 +22,10 @@ from flask import Flask
 # КОНФИГУРАЦИЯ (ОСНОВНОЙ БОТ)
 # ============================================
 
-BOT_TOKEN = "8841797835:AAE5lGF57lC-0yxHrqQbfQ-1CdHXLhbyt_K"  # ЗАМЕНИТЕ НА ВАШ ТОКЕН!
+BOT_TOKEN = "8997465806:AAEPCdj2o2GmeRlnBzUJTG2qYDTwxt0ARXk"  # ЗАМЕНИТЕ НА ВАШ ТОКЕН!
 ADMIN_ID = 7753887058
 CRYPTO_WALLET = "UQDRRRGutl_ccP25XcwbOK-RN2UXuvE1_GFoerlaIDvmwO7I"
-BOT_USERNAME = "asoqwdjk_bot"
+BOT_USERNAME = "dfsddfagas_bot"
 
 # ============================================
 # РАСПОЗНАВАНИЕ РЕЖИМА
