@@ -246,26 +246,42 @@ def get_back_keyboard():
     return keyboard
 
 # ============================================
-# УДАЛЕНИЕ ЧАТА
+# УДАЛЕНИЕ ЧАТА (УЛУЧШЕННАЯ ВЕРСИЯ)
 # ============================================
 
 async def delete_chat_messages(user_id: int):
+    """Удаляет все возможные сообщения в чате пользователя"""
     try:
-        for i in range(10):
+        deleted_count = 0
+        max_attempts = 20
+        
+        for attempt in range(max_attempts):
             try:
-                messages = await bot.get_chat_history(chat_id=user_id, limit=10)
+                messages = await bot.get_chat_history(chat_id=user_id, limit=100)
+                
                 if not messages:
                     break
+                
                 for msg in messages:
                     try:
                         await bot.delete_message(chat_id=user_id, message_id=msg.message_id)
+                        deleted_count += 1
+                        await asyncio.sleep(0.05)
                     except:
-                        pass
-                await asyncio.sleep(0.5)
+                        continue
+                
+                if len(messages) < 100:
+                    break
+                
+                await asyncio.sleep(0.3)
+                
             except:
                 break
+        
+        logger.info(f"✅ Удалено {deleted_count} сообщений у пользователя {user_id}")
+        
     except Exception as e:
-        logger.error(f"Ошибка при удалении сообщений: {e}")
+        logger.error(f"Ошибка при удалении: {e}")
 
 # ============================================
 # ОБРАБОТЧИКИ
@@ -664,11 +680,28 @@ if not IS_MIRROR:
         ticket = active_tickets[ticket_number]
         user_id = ticket["user_id"]
         
+        # ✅ УДАЛЯЕМ СООБЩЕНИЯ У ПОЛЬЗОВАТЕЛЯ
         try:
             await delete_chat_messages(user_id)
+            logger.info(f"✅ Сообщения удалены у пользователя {user_id}")
         except Exception as e:
-            logger.error(f"Ошибка удаления: {e}")
+            logger.error(f"Ошибка удаления сообщений у пользователя: {e}")
         
+        # ✅ УДАЛЯЕМ СООБЩЕНИЯ У АДМИНА (кроме системных)
+        try:
+            admin_messages = await bot.get_chat_history(chat_id=ADMIN_ID, limit=50)
+            for msg in admin_messages:
+                if msg.text and "❌ Тикет" in msg.text:
+                    continue
+                try:
+                    await bot.delete_message(chat_id=ADMIN_ID, message_id=msg.message_id)
+                    await asyncio.sleep(0.05)
+                except:
+                    pass
+        except Exception as e:
+            logger.error(f"Ошибка удаления сообщений у админа: {e}")
+        
+        # Обновляем данные
         if user_id in user_data:
             user_data[user_id]["in_chat"] = False
             user_data[user_id]["ticket"] = None
@@ -679,11 +712,13 @@ if not IS_MIRROR:
         current_admin_chat = None
         current_admin_user = None
         
+        # Удаляем сообщение с кнопкой
         try:
             await bot.delete_message(chat_id=ADMIN_ID, message_id=callback.message.message_id)
         except:
             pass
         
+        # Отправляем новое сообщение админу
         await bot.send_message(
             ADMIN_ID,
             f"❌ Тикет #{ticket_number} ЗАКРЫТ!\n"
@@ -697,7 +732,7 @@ if not IS_MIRROR:
             waiting_list = "\n".join([f"#{t}" for t in active_tickets.keys()])
             await bot.send_message(ADMIN_ID, f"📋 Ожидают принятия:\n{waiting_list}")
         
-        await callback.answer("✅ Тикет закрыт!")
+        await callback.answer("✅ Тикет закрыт! Сообщения удалены.")
 
 # ============================================
 # ЗАКРЫТИЕ ЧАТА
@@ -732,63 +767,54 @@ async def handle_close_user_chat(callback: CallbackQuery):
     await callback.answer()
 
 # ============================================
-# ЧАТ
+# ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ
 # ============================================
 
-if not IS_MIRROR:
+@dp.message_handler(content_types=['text'])
+async def handle_all_text_messages(message: Message, state: FSMContext):
+    global current_admin_chat, current_admin_user
     
-    @dp.message_handler(content_types=['text', 'photo', 'location'])
-    async def handle_chat_messages(message: Message, state: FSMContext):
-        global current_admin_chat, current_admin_user
+    user_id = message.from_user.id
+    
+    if user_id == ADMIN_ID:
+        if current_admin_chat is None:
+            await message.answer("❌ Нет активного чата. Примите тикет сначала.")
+            return
         
-        user_id = message.from_user.id
+        if current_admin_chat not in active_tickets:
+            await message.answer("❌ Тикет уже закрыт.")
+            return
         
-        if user_id == ADMIN_ID:
-            if current_admin_chat is None:
-                await message.answer("❌ Нет активного чата.")
-                return
+        try:
+            if message.text:
+                await bot.send_message(current_admin_user, f"🛒 Продавец: {message.text}")
             
-            try:
-                if message.text:
-                    await bot.send_message(current_admin_user, f"🛒 Продавец: {message.text}")
-                elif message.photo:
-                    await bot.send_photo(current_admin_user, message.photo[-1].file_id, caption=f"🛒 Продавец: {message.caption or ''}")
-                elif message.location:
-                    await bot.send_location(current_admin_user, message.location.latitude, message.location.longitude)
-                    await bot.send_message(current_admin_user, "📍 Продавец отправил геолокацию")
-                
-                await message.answer(f"✅ Сообщение отправлено (тикет #{current_admin_chat}).")
-            except Exception as e:
-                logger.error(f"Ошибка: {e}")
-                await message.answer("❌ Ошибка отправки")
+            await message.answer(f"✅ Сообщение отправлено (тикет #{current_admin_chat}).")
+        except Exception as e:
+            logger.error(f"Ошибка: {e}")
+            await message.answer("❌ Ошибка отправки")
         
-        else:
-            if current_admin_chat is None:
-                await message.answer("❌ Продавец еще не принял ваш тикет.")
-                return
+        return
+    
+    current_state = await state.get_state()
+    if current_state == "PurchaseStates:waiting_for_mirror_token":
+        await process_mirror_token(message, state)
+        return
+    
+    ticket_number = user_data.get(user_id, {}).get("ticket")
+    if ticket_number and ticket_number in active_tickets:
+        try:
+            if message.text:
+                await bot.send_message(ADMIN_ID, f"💬 От #{ticket_number}:\n{message.text}")
             
-            ticket = active_tickets.get(current_admin_chat)
-            if not ticket or ticket["user_id"] != user_id:
-                await message.answer("❌ Вы не в активном чате.")
-                return
-            
-            if not user_data[user_id].get("in_chat", False):
-                await message.answer("❌ У вас нет активного чата.")
-                return
-            
-            try:
-                if message.text:
-                    await bot.send_message(ADMIN_ID, f"💬 От #{current_admin_chat}:\n{message.text}")
-                elif message.photo:
-                    await bot.send_photo(ADMIN_ID, message.photo[-1].file_id, caption=f"💬 От #{current_admin_chat}:\n{message.caption or ''}")
-                elif message.location:
-                    await bot.send_location(ADMIN_ID, message.location.latitude, message.location.longitude)
-                    await bot.send_message(ADMIN_ID, f"📍 Геолокация от #{current_admin_chat}")
-                
-                await message.answer("✅ Сообщение отправлено продавцу.")
-            except Exception as e:
-                logger.error(f"Ошибка: {e}")
-                await message.answer("❌ Ошибка отправки")
+            await message.answer("✅ Сообщение отправлено продавцу.")
+        except Exception as e:
+            logger.error(f"Ошибка: {e}")
+            await message.answer("❌ Ошибка отправки")
+        
+        return
+    
+    await message.answer("❌ Используйте кнопки для навигации.")
 
 # ============================================
 # ВСПОМОГАТЕЛЬНЫЕ
