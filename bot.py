@@ -246,7 +246,7 @@ def get_back_keyboard():
     return keyboard
 
 # ============================================
-# УДАЛЕНИЕ ЧАТА (БЫСТРОЕ)
+# УДАЛЕНИЕ ЧАТА
 # ============================================
 
 async def delete_chat_messages(user_id: int):
@@ -507,6 +507,10 @@ async def handle_category(callback: CallbackQuery, state: FSMContext):
     )
     await callback.answer()
 
+# ============================================
+# ✅ ИСПРАВЛЕННАЯ ФУНКЦИЯ ПОКУПКИ
+# ============================================
+
 @dp.callback_query_handler(lambda c: c.data.startswith("product_"))
 async def handle_product(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
@@ -531,6 +535,7 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
     user_data[user_id]["purchases_today"] += 1
     user_data[user_id]["total_purchases"] += 1
     user_data[user_id]["ticket"] = ticket_number
+    user_data[user_id]["in_chat"] = True  # ✅ ВАЖНО: помечаем, что пользователь в чате
     
     if user_data[user_id]["purchases_today"] >= 2:
         user_data[user_id]["cooldown_until"] = datetime.now() + timedelta(hours=24)
@@ -686,8 +691,7 @@ if not IS_MIRROR:
         del active_tickets[ticket_number]
         
         current_admin_chat = None
-        current_admin_user = None
-        
+        current_admin_user = None        
         try:
             await bot.delete_message(chat_id=ADMIN_ID, message_id=callback.message.message_id)
         except:
@@ -739,7 +743,7 @@ async def handle_close_user_chat(callback: CallbackQuery):
     await callback.answer()
 
 # ============================================
-# ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ
+# ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ (ИСПРАВЛЕНО)
 # ============================================
 
 @dp.message_handler(content_types=['text'])
@@ -757,7 +761,6 @@ async def handle_all_text_messages(message: Message, state: FSMContext):
     
     # ✅ ВТОРАЯ ПРОВЕРКА: если это админ
     if user_id == ADMIN_ID:
-        # Если есть активный чат — отправляем сообщение
         if current_admin_chat is not None and current_admin_chat in active_tickets:
             try:
                 await bot.send_message(current_admin_user, f"🛒 Продавец: {text}")
@@ -768,14 +771,14 @@ async def handle_all_text_messages(message: Message, state: FSMContext):
                 await message.answer("❌ Ошибка отправки")
                 return
         
-        # Если нет активного чата — просто говорим об этом
         await message.answer("❌ Нет активного чата. Примите тикет сначала.")
         return
     
     # ✅ ТРЕТЬЯ ПРОВЕРКА: если у пользователя есть активный тикет
     ticket_number = user_data.get(user_id, {}).get("ticket")
-    if ticket_number and ticket_number in active_tickets:
-        # ✅ Сообщение от пользователя с тикетом → отправляем админу
+    in_chat = user_data.get(user_id, {}).get("in_chat", False)
+    
+    if ticket_number and ticket_number in active_tickets and in_chat:
         try:
             await bot.send_message(ADMIN_ID, f"💬 От #{ticket_number}:\n{text}")
             await message.answer("✅ Отправлено продавцу.")
@@ -784,8 +787,7 @@ async def handle_all_text_messages(message: Message, state: FSMContext):
             await message.answer("❌ Ошибка отправки")
         return
     
-    # ✅ ВСЕ ОСТАЛЬНЫЕ: пользователь без тикета → ПРОСТО ИГНОРИРУЕМ
-    # НЕ ПОКАЗЫВАЕМ админу, НЕ ОТВЕЧАЕМ пользователю (или отвечаем, что нужно купить)
+    # ✅ ВСЕ ОСТАЛЬНЫЕ: пользователь без тикета
     await message.answer("❌ Чтобы общаться с продавцом, сначала сделайте покупку через кнопку '💠 Купить нарк0тy'.")
 
 # ============================================
