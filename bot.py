@@ -19,7 +19,7 @@ from aiogram.utils import executor
 from flask import Flask
 
 # ============================================
-# КОНФИГУРАЦИЯ (ОБНОВЛЕНО)
+# КОНФИГУРАЦИЯ
 # ============================================
 
 BOT_TOKEN = "8997465806:AAEPCdj2o2GmeRlnBzUJTG2qYDTwxt0ARXk"
@@ -250,7 +250,6 @@ def get_back_keyboard():
 # ============================================
 
 async def delete_chat_messages(user_id: int):
-    """Быстрое удаление сообщений (максимум 200 сообщений)"""
     try:
         deleted_count = 0
         for attempt in range(2):
@@ -597,7 +596,7 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
     await callback.answer("✅ Тикет создан!")
 
 # ============================================
-# АДМИН (БЫСТРОЕ ПРИНЯТИЕ И ЗАКРЫТИЕ)
+# АДМИН
 # ============================================
 
 if not IS_MIRROR:
@@ -629,10 +628,8 @@ if not IS_MIRROR:
         if user_id in user_data:
             user_data[user_id]["in_chat"] = True
         
-        # ✅ БЫСТРО отвечаем на коллбэк
         await callback.answer("✅ Тикет принят!")
         
-        # ✅ ОБНОВЛЯЕМ сообщение
         await callback.message.edit_text(
             f"✅ Тикет #{ticket_number} ПРИНЯТ!\n"
             f"━━━━━━━━━━━━━━━━\n"
@@ -673,17 +670,14 @@ if not IS_MIRROR:
         ticket = active_tickets[ticket_number]
         user_id = ticket["user_id"]
         
-        # ✅ СНАЧАЛА отвечаем на коллбэк
         await callback.answer("✅ Тикет закрывается...")
         
-        # ✅ ПОТОМ удаляем сообщения
         try:
             await delete_chat_messages(user_id)
             logger.info(f"✅ Сообщения удалены у пользователя {user_id}")
         except Exception as e:
             logger.error(f"Ошибка удаления сообщений у пользователя: {e}")
         
-        # ✅ ОБНОВЛЯЕМ данные
         if user_id in user_data:
             user_data[user_id]["in_chat"] = False
             user_data[user_id]["ticket"] = None
@@ -694,13 +688,11 @@ if not IS_MIRROR:
         current_admin_chat = None
         current_admin_user = None
         
-        # ✅ УДАЛЯЕМ сообщение с кнопкой
         try:
             await bot.delete_message(chat_id=ADMIN_ID, message_id=callback.message.message_id)
         except:
             pass
         
-        # ✅ ОТПРАВЛЯЕМ новое сообщение
         await bot.send_message(
             ADMIN_ID,
             f"❌ Тикет #{ticket_number} ЗАКРЫТ!\n"
@@ -747,7 +739,7 @@ async def handle_close_user_chat(callback: CallbackQuery):
     await callback.answer()
 
 # ============================================
-# ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ (БЫСТРАЯ)
+# ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ
 # ============================================
 
 @dp.message_handler(content_types=['text'])
@@ -763,29 +755,27 @@ async def handle_all_text_messages(message: Message, state: FSMContext):
         await process_mirror_token(message, state)
         return
     
-    # ✅ ВТОРАЯ ПРОВЕРКА: админ в чате
+    # ✅ ВТОРАЯ ПРОВЕРКА: если это админ
     if user_id == ADMIN_ID:
+        # Если есть активный чат — отправляем сообщение
         if current_admin_chat is not None and current_admin_chat in active_tickets:
             try:
                 await bot.send_message(current_admin_user, f"🛒 Продавец: {text}")
                 await message.answer(f"✅ Отправлено (тикет #{current_admin_chat})")
+                return
             except Exception as e:
-                logger.error(f"Ошибка: {e}")
+                logger.error(f"Ошибка отправки админом: {e}")
                 await message.answer("❌ Ошибка отправки")
-        else:
-            welcome_text = (
-                "Привет, это бот для покупки наркотиков!\n"
-                "Здесь есть ассортимент наркотиков по типу солей, каннибиноиды.\n"
-                "После выбора товара создается тикет, и вы общаетесь с продавцом напрямую.\n"
-                "Оплата производится в криптовалюте GRAM.\n"
-                "Всех благ и хороших покупок."
-            )
-            await message.answer(welcome_text, reply_markup=get_main_keyboard())
+                return
+        
+        # Если нет активного чата — просто говорим об этом
+        await message.answer("❌ Нет активного чата. Примите тикет сначала.")
         return
     
-    # ✅ ТРЕТЬЯ ПРОВЕРКА: пользователь в чате
+    # ✅ ТРЕТЬЯ ПРОВЕРКА: если у пользователя есть активный тикет
     ticket_number = user_data.get(user_id, {}).get("ticket")
     if ticket_number and ticket_number in active_tickets:
+        # ✅ Сообщение от пользователя с тикетом → отправляем админу
         try:
             await bot.send_message(ADMIN_ID, f"💬 От #{ticket_number}:\n{text}")
             await message.answer("✅ Отправлено продавцу.")
@@ -794,8 +784,9 @@ async def handle_all_text_messages(message: Message, state: FSMContext):
             await message.answer("❌ Ошибка отправки")
         return
     
-    # ✅ ВСЕ ОСТАЛЬНЫЕ
-    await message.answer("❌ Используйте кнопки.")
+    # ✅ ВСЕ ОСТАЛЬНЫЕ: пользователь без тикета → ПРОСТО ИГНОРИРУЕМ
+    # НЕ ПОКАЗЫВАЕМ админу, НЕ ОТВЕЧАЕМ пользователю (или отвечаем, что нужно купить)
+    await message.answer("❌ Чтобы общаться с продавцом, сначала сделайте покупку через кнопку '💠 Купить нарк0тy'.")
 
 # ============================================
 # ВСПОМОГАТЕЛЬНЫЕ
