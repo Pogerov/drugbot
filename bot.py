@@ -22,10 +22,10 @@ from flask import Flask
 # КОНФИГУРАЦИЯ (ОСНОВНОЙ БОТ)
 # ============================================
 
-BOT_TOKEN = "НОВЫЙ_ТОКЕН_БОТА"  # ТОКЕН ОСНОВНОГО БОТА
+BOT_TOKEN = "8841797835:AAGD67q-kLD8DCV6GfedylCWwAofQJRiK-A"  # ТОКЕН ОСНОВНОГО БОТА
 ADMIN_ID = 7753887058
 CRYPTO_WALLET = "UQDRRRGutl_ccP25XcwbOK-RN2UXuvE1_GFoerlaIDvmwO7I"
-BOT_USERNAME = "drugbote_bot"
+BOT_USERNAME = "asoqwdjk_bot"
 
 # ============================================
 # РАСПОЗНАВАНИЕ РЕЖИМА
