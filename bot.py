@@ -22,7 +22,7 @@ from flask import Flask
 # КОНФИГУРАЦИЯ (ОСНОВНОЙ БОТ)
 # ============================================
 
-BOT_TOKEN = "8841797835:AAGD67q-kLD8DCV6GfedylCWwAofQJRiK-A"  # ЗАМЕНИТЕ НА ВАШ ТОКЕН!
+BOT_TOKEN = "8841797835:AAE5lGF57lC-0yxHrqQbfQ-1CdHXLhbyt_K"  # ЗАМЕНИТЕ НА ВАШ ТОКЕН!
 ADMIN_ID = 7753887058
 CRYPTO_WALLET = "UQDRRRGutl_ccP25XcwbOK-RN2UXuvE1_GFoerlaIDvmwO7I"
 BOT_USERNAME = "asoqwdjk_bot"
