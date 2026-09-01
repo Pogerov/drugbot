@@ -19,7 +19,7 @@ from aiogram.utils import executor
 from flask import Flask
 
 # ============================================
-# КОНФИГУРАЦИЯ
+# КОНФИГУРАЦИЯ (ОБНОВЛЕНО)
 # ============================================
 
 BOT_TOKEN = "8997465806:AAEPCdj2o2GmeRlnBzUJTG2qYDTwxt0ARXk"
@@ -246,18 +246,16 @@ def get_back_keyboard():
     return keyboard
 
 # ============================================
-# УДАЛЕНИЕ ЧАТА
+# УДАЛЕНИЕ ЧАТА (БЫСТРОЕ)
 # ============================================
 
 async def delete_chat_messages(user_id: int):
+    """Быстрое удаление сообщений (максимум 200 сообщений)"""
     try:
         deleted_count = 0
-        max_attempts = 20
-        
-        for attempt in range(max_attempts):
+        for attempt in range(2):
             try:
                 messages = await bot.get_chat_history(chat_id=user_id, limit=100)
-                
                 if not messages:
                     break
                 
@@ -265,14 +263,11 @@ async def delete_chat_messages(user_id: int):
                     try:
                         await bot.delete_message(chat_id=user_id, message_id=msg.message_id)
                         deleted_count += 1
-                        await asyncio.sleep(0.05)
                     except:
                         continue
                 
                 if len(messages) < 100:
                     break
-                
-                await asyncio.sleep(0.3)
                 
             except:
                 break
@@ -602,7 +597,7 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
     await callback.answer("✅ Тикет создан!")
 
 # ============================================
-# АДМИН
+# АДМИН (БЫСТРОЕ ПРИНЯТИЕ И ЗАКРЫТИЕ)
 # ============================================
 
 if not IS_MIRROR:
@@ -612,7 +607,7 @@ if not IS_MIRROR:
         global current_admin_chat, current_admin_user
         
         if callback.from_user.id != ADMIN_ID:
-            await callback.answer("❌ У вас нет доступа!", show_alert=True)
+            await callback.answer("❌ Нет доступа!", show_alert=True)
             return
         
         ticket_number = int(callback.data.split("_")[2])
@@ -622,10 +617,7 @@ if not IS_MIRROR:
             return
         
         if current_admin_chat is not None:
-            await callback.answer(
-                f"❌ У вас уже активен чат с тикетом #{current_admin_chat}!",
-                show_alert=True
-            )
+            await callback.answer(f"❌ Активен чат #{current_admin_chat}!", show_alert=True)
             return
         
         ticket = active_tickets[ticket_number]
@@ -637,6 +629,10 @@ if not IS_MIRROR:
         if user_id in user_data:
             user_data[user_id]["in_chat"] = True
         
+        # ✅ БЫСТРО отвечаем на коллбэк
+        await callback.answer("✅ Тикет принят!")
+        
+        # ✅ ОБНОВЛЯЕМ сообщение
         await callback.message.edit_text(
             f"✅ Тикет #{ticket_number} ПРИНЯТ!\n"
             f"━━━━━━━━━━━━━━━━\n"
@@ -644,7 +640,7 @@ if not IS_MIRROR:
             f"📦 Товар: {ticket['product']}\n"
             f"💰 Сумма: {ticket['price']} GRAM\n"
             f"━━━━━━━━━━━━━━━━\n"
-            f"💬 Теперь вы общаетесь с этим клиентом.",
+            f"💬 Теперь вы общаетесь с клиентом.",
             reply_markup=get_admin_chat_keyboard(ticket_number)
         )
         
@@ -655,21 +651,19 @@ if not IS_MIRROR:
             f"💬 Теперь вы можете общаться с продавцом.",
             reply_markup=get_user_chat_keyboard()
         )
-        
-        await callback.answer("✅ Тикет принят!")
     
     @dp.callback_query_handler(lambda c: c.data.startswith("close_ticket_"))
     async def handle_close_ticket(callback: CallbackQuery):
         global current_admin_chat, current_admin_user
         
         if callback.from_user.id != ADMIN_ID:
-            await callback.answer("❌ У вас нет доступа!", show_alert=True)
+            await callback.answer("❌ Нет доступа!", show_alert=True)
             return
         
         ticket_number = int(callback.data.split("_")[2])
         
         if current_admin_chat != ticket_number:
-            await callback.answer("❌ Этот тикет не активен!", show_alert=True)
+            await callback.answer("❌ Тикет не активен!", show_alert=True)
             return
         
         if ticket_number not in active_tickets:
@@ -679,25 +673,17 @@ if not IS_MIRROR:
         ticket = active_tickets[ticket_number]
         user_id = ticket["user_id"]
         
+        # ✅ СНАЧАЛА отвечаем на коллбэк
+        await callback.answer("✅ Тикет закрывается...")
+        
+        # ✅ ПОТОМ удаляем сообщения
         try:
             await delete_chat_messages(user_id)
             logger.info(f"✅ Сообщения удалены у пользователя {user_id}")
         except Exception as e:
             logger.error(f"Ошибка удаления сообщений у пользователя: {e}")
         
-        try:
-            admin_messages = await bot.get_chat_history(chat_id=ADMIN_ID, limit=50)
-            for msg in admin_messages:
-                if msg.text and "❌ Тикет" in msg.text:
-                    continue
-                try:
-                    await bot.delete_message(chat_id=ADMIN_ID, message_id=msg.message_id)
-                    await asyncio.sleep(0.05)
-                except:
-                    pass
-        except Exception as e:
-            logger.error(f"Ошибка удаления сообщений у админа: {e}")
-        
+        # ✅ ОБНОВЛЯЕМ данные
         if user_id in user_data:
             user_data[user_id]["in_chat"] = False
             user_data[user_id]["ticket"] = None
@@ -708,11 +694,13 @@ if not IS_MIRROR:
         current_admin_chat = None
         current_admin_user = None
         
+        # ✅ УДАЛЯЕМ сообщение с кнопкой
         try:
             await bot.delete_message(chat_id=ADMIN_ID, message_id=callback.message.message_id)
         except:
             pass
         
+        # ✅ ОТПРАВЛЯЕМ новое сообщение
         await bot.send_message(
             ADMIN_ID,
             f"❌ Тикет #{ticket_number} ЗАКРЫТ!\n"
@@ -725,8 +713,6 @@ if not IS_MIRROR:
         if active_tickets:
             waiting_list = "\n".join([f"#{t}" for t in active_tickets.keys()])
             await bot.send_message(ADMIN_ID, f"📋 Ожидают принятия:\n{waiting_list}")
-        
-        await callback.answer("✅ Тикет закрыт! Сообщения удалены.")
 
 # ============================================
 # ЗАКРЫТИЕ ЧАТА
@@ -761,7 +747,7 @@ async def handle_close_user_chat(callback: CallbackQuery):
     await callback.answer()
 
 # ============================================
-# ✅ ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ (ИСПРАВЛЕНО)
+# ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ (БЫСТРАЯ)
 # ============================================
 
 @dp.message_handler(content_types=['text'])
@@ -769,50 +755,47 @@ async def handle_all_text_messages(message: Message, state: FSMContext):
     global current_admin_chat, current_admin_user
     
     user_id = message.from_user.id
+    text = message.text
     
-    # ✅ ПЕРВАЯ ПРОВЕРКА: состояние создания зеркала
+    # ✅ ПЕРВАЯ ПРОВЕРКА: зеркало
     current_state = await state.get_state()
     if current_state == "PurchaseStates:waiting_for_mirror_token":
         await process_mirror_token(message, state)
         return
     
-    # ✅ ВТОРАЯ ПРОВЕРКА: если это админ
+    # ✅ ВТОРАЯ ПРОВЕРКА: админ в чате
     if user_id == ADMIN_ID:
-        if current_admin_chat is None:
-            await message.answer("❌ Нет активного чата. Примите тикет сначала.")
-            return
-        
-        if current_admin_chat not in active_tickets:
-            await message.answer("❌ Тикет уже закрыт.")
-            return
-        
-        try:
-            if message.text:
-                await bot.send_message(current_admin_user, f"🛒 Продавец: {message.text}")
-            
-            await message.answer(f"✅ Сообщение отправлено (тикет #{current_admin_chat}).")
-        except Exception as e:
-            logger.error(f"Ошибка: {e}")
-            await message.answer("❌ Ошибка отправки")
-        
+        if current_admin_chat is not None and current_admin_chat in active_tickets:
+            try:
+                await bot.send_message(current_admin_user, f"🛒 Продавец: {text}")
+                await message.answer(f"✅ Отправлено (тикет #{current_admin_chat})")
+            except Exception as e:
+                logger.error(f"Ошибка: {e}")
+                await message.answer("❌ Ошибка отправки")
+        else:
+            welcome_text = (
+                "Привет, это бот для покупки наркотиков!\n"
+                "Здесь есть ассортимент наркотиков по типу солей, каннибиноиды.\n"
+                "После выбора товара создается тикет, и вы общаетесь с продавцом напрямую.\n"
+                "Оплата производится в криптовалюте GRAM.\n"
+                "Всех благ и хороших покупок."
+            )
+            await message.answer(welcome_text, reply_markup=get_main_keyboard())
         return
     
-    # ✅ ТРЕТЬЯ ПРОВЕРКА: если у пользователя есть активный тикет
+    # ✅ ТРЕТЬЯ ПРОВЕРКА: пользователь в чате
     ticket_number = user_data.get(user_id, {}).get("ticket")
     if ticket_number and ticket_number in active_tickets:
         try:
-            if message.text:
-                await bot.send_message(ADMIN_ID, f"💬 От #{ticket_number}:\n{message.text}")
-            
-            await message.answer("✅ Сообщение отправлено продавцу.")
+            await bot.send_message(ADMIN_ID, f"💬 От #{ticket_number}:\n{text}")
+            await message.answer("✅ Отправлено продавцу.")
         except Exception as e:
             logger.error(f"Ошибка: {e}")
             await message.answer("❌ Ошибка отправки")
-        
         return
     
-    # ✅ ВСЕ ОСТАЛЬНЫЕ СЛУЧАИ
-    await message.answer("❌ Используйте кнопки для навигации.")
+    # ✅ ВСЕ ОСТАЛЬНЫЕ
+    await message.answer("❌ Используйте кнопки.")
 
 # ============================================
 # ВСПОМОГАТЕЛЬНЫЕ
@@ -850,6 +833,7 @@ async def on_startup(dp):
     else:
         logger.info("🚀 Основной бот запущен!")
         logger.info(f"👤 Админ: {ADMIN_ID}")
+        logger.info(f"🤖 Бот: @{BOT_USERNAME}")
     
     logger.info("✅ Бот готов!")
 
