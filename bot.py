@@ -246,11 +246,10 @@ def get_back_keyboard():
     return keyboard
 
 # ============================================
-# УДАЛЕНИЕ ЧАТА (УЛУЧШЕННАЯ ВЕРСИЯ)
+# УДАЛЕНИЕ ЧАТА
 # ============================================
 
 async def delete_chat_messages(user_id: int):
-    """Удаляет все возможные сообщения в чате пользователя"""
     try:
         deleted_count = 0
         max_attempts = 20
@@ -680,14 +679,12 @@ if not IS_MIRROR:
         ticket = active_tickets[ticket_number]
         user_id = ticket["user_id"]
         
-        # ✅ УДАЛЯЕМ СООБЩЕНИЯ У ПОЛЬЗОВАТЕЛЯ
         try:
             await delete_chat_messages(user_id)
             logger.info(f"✅ Сообщения удалены у пользователя {user_id}")
         except Exception as e:
             logger.error(f"Ошибка удаления сообщений у пользователя: {e}")
         
-        # ✅ УДАЛЯЕМ СООБЩЕНИЯ У АДМИНА (кроме системных)
         try:
             admin_messages = await bot.get_chat_history(chat_id=ADMIN_ID, limit=50)
             for msg in admin_messages:
@@ -701,7 +698,6 @@ if not IS_MIRROR:
         except Exception as e:
             logger.error(f"Ошибка удаления сообщений у админа: {e}")
         
-        # Обновляем данные
         if user_id in user_data:
             user_data[user_id]["in_chat"] = False
             user_data[user_id]["ticket"] = None
@@ -712,13 +708,11 @@ if not IS_MIRROR:
         current_admin_chat = None
         current_admin_user = None
         
-        # Удаляем сообщение с кнопкой
         try:
             await bot.delete_message(chat_id=ADMIN_ID, message_id=callback.message.message_id)
         except:
             pass
         
-        # Отправляем новое сообщение админу
         await bot.send_message(
             ADMIN_ID,
             f"❌ Тикет #{ticket_number} ЗАКРЫТ!\n"
@@ -767,7 +761,7 @@ async def handle_close_user_chat(callback: CallbackQuery):
     await callback.answer()
 
 # ============================================
-# ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ
+# ✅ ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ (ИСПРАВЛЕНО)
 # ============================================
 
 @dp.message_handler(content_types=['text'])
@@ -776,6 +770,13 @@ async def handle_all_text_messages(message: Message, state: FSMContext):
     
     user_id = message.from_user.id
     
+    # ✅ ПЕРВАЯ ПРОВЕРКА: состояние создания зеркала
+    current_state = await state.get_state()
+    if current_state == "PurchaseStates:waiting_for_mirror_token":
+        await process_mirror_token(message, state)
+        return
+    
+    # ✅ ВТОРАЯ ПРОВЕРКА: если это админ
     if user_id == ADMIN_ID:
         if current_admin_chat is None:
             await message.answer("❌ Нет активного чата. Примите тикет сначала.")
@@ -796,11 +797,7 @@ async def handle_all_text_messages(message: Message, state: FSMContext):
         
         return
     
-    current_state = await state.get_state()
-    if current_state == "PurchaseStates:waiting_for_mirror_token":
-        await process_mirror_token(message, state)
-        return
-    
+    # ✅ ТРЕТЬЯ ПРОВЕРКА: если у пользователя есть активный тикет
     ticket_number = user_data.get(user_id, {}).get("ticket")
     if ticket_number and ticket_number in active_tickets:
         try:
@@ -814,6 +811,7 @@ async def handle_all_text_messages(message: Message, state: FSMContext):
         
         return
     
+    # ✅ ВСЕ ОСТАЛЬНЫЕ СЛУЧАИ
     await message.answer("❌ Используйте кнопки для навигации.")
 
 # ============================================
