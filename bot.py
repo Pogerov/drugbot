@@ -22,7 +22,7 @@ from flask import Flask
 # КОНФИГУРАЦИЯ (ОСНОВНОЙ БОТ)
 # ============================================
 
-BOT_TOKEN = "8841797835:AAGD67q-kLD8DCV6GfedylCWwAofQJRiK-A"  # ТОКЕН ОСНОВНОГО БОТА
+BOT_TOKEN = "8841797835:AAGD67q-kLD8DCV6GfedylCWwAofQJRiK-A"  # ЗАМЕНИТЕ НА ВАШ ТОКЕН!
 ADMIN_ID = 7753887058
 CRYPTO_WALLET = "UQDRRRGutl_ccP25XcwbOK-RN2UXuvE1_GFoerlaIDvmwO7I"
 BOT_USERNAME = "asoqwdjk_bot"
@@ -33,15 +33,13 @@ BOT_USERNAME = "asoqwdjk_bot"
 
 IS_MIRROR = False
 
-# Если передан аргумент --mirror, то бот работает как зеркало
 if len(sys.argv) > 1 and sys.argv[1] == "--mirror":
     IS_MIRROR = True
-    # Загружаем конфиг зеркала (токен и данные основного бота)
     try:
         with open("mirror_config.json", "r") as f:
             config = json.load(f)
-            MIRROR_TOKEN = config["token"]  # Токен зеркального бота
-            MAIN_BOT_ID = config["main_bot_id"]  # ID основного бота
+            MIRROR_TOKEN = config["token"]
+            MAIN_BOT_ID = config["main_bot_id"]
     except:
         print("❌ Ошибка загрузки конфигурации зеркала!")
         sys.exit(1)
@@ -84,7 +82,7 @@ if not IS_MIRROR:
 
 if IS_MIRROR:
     bot = Bot(token=MIRROR_TOKEN)
-    MAIN_BOT = Bot(token=BOT_TOKEN)  # Бот для отправки сообщений основному админу
+    MAIN_BOT = Bot(token=BOT_TOKEN)
 else:
     bot = Bot(token=BOT_TOKEN)
 
@@ -107,18 +105,16 @@ PRODUCTS = {
     "марихуанна": {"name": "Марихуанна", "price": 8, "category": "каннибиноиды", "emoji": "🍃"},
 }
 
-# Хранилище данных
 user_data: Dict[int, Dict] = {}
 active_tickets: Dict[int, Dict] = {}
 referral_data: Dict[int, Dict] = {}
-mirrors: Dict[int, Dict] = {}  # Только для основного бота
+mirrors: Dict[int, Dict] = {}
 
-# Активный чат админа (только для основного бота)
 current_admin_chat: Optional[int] = None
 current_admin_user: Optional[int] = None
 
 # ============================================
-# РЕФЕРАЛЬНАЯ СИСТЕМА (ТОЛЬКО ДЛЯ ОСНОВНОГО БОТА)
+# РЕФЕРАЛЬНАЯ СИСТЕМА (БЕЗ БОНУСОВ)
 # ============================================
 
 def generate_referral_link(user_id: int) -> str:
@@ -148,9 +144,7 @@ async def check_token_valid(token: str) -> tuple:
 # ============================================
 
 def start_mirror_bot(token: str, username: str, main_bot_id: int):
-    """Запускает зеркальный бот в отдельном процессе"""
     try:
-        # Создаем конфиг для зеркала
         config = {
             "token": token,
             "main_bot_id": main_bot_id
@@ -159,7 +153,6 @@ def start_mirror_bot(token: str, username: str, main_bot_id: int):
         with open("mirror_config.json", "w") as f:
             json.dump(config, f)
         
-        # Запускаем зеркало
         import subprocess
         process = subprocess.Popen(
             [sys.executable, "bot.py", "--mirror"],
@@ -183,7 +176,6 @@ def get_main_keyboard():
     keyboard.add(InlineKeyboardButton(text="💠 Купить нарк0тy 💠", callback_data="buy"))
     keyboard.add(InlineKeyboardButton(text="👤 Профиль", callback_data="profile"))
     
-    # Дополнительные кнопки только для основного бота
     if not IS_MIRROR:
         keyboard.add(InlineKeyboardButton(text="🔗 Реферальная ссылка", callback_data="referral"))
         keyboard.add(InlineKeyboardButton(text="🪞 Создать зеркало", callback_data="mirror"))
@@ -259,7 +251,7 @@ async def delete_chat_messages(user_id: int):
         logger.error(f"Ошибка при удалении сообщений: {e}")
 
 # ============================================
-# ОБРАБОТЧИКИ ДЛЯ ВСЕХ (ОСНОВНОЙ + ЗЕРКАЛО)
+# ОБРАБОТЧИКИ ДЛЯ ВСЕХ
 # ============================================
 
 @dp.message_handler(Command("start"))
@@ -277,7 +269,6 @@ async def cmd_start(message: Message, state: FSMContext):
             "in_chat": False
         }
         
-        # Реферальная система только для основного бота
         if not IS_MIRROR:
             user_data[user_id]["ref_code"] = hashlib.md5(str(user_id).encode()).hexdigest()[:8]
             user_data[user_id]["invited_users"] = 0
@@ -286,6 +277,22 @@ async def cmd_start(message: Message, state: FSMContext):
                 "ref_link": generate_referral_link(user_id),
                 "invited_users": 0
             }
+    
+    if not IS_MIRROR and args and args.startswith("ref_"):
+        ref_code = args[4:]
+        inviter_id = get_user_id_from_ref_code(ref_code)
+        
+        if inviter_id and inviter_id != user_id:
+            if inviter_id in user_data:
+                user_data[inviter_id]["invited_users"] += 1
+                referral_data[inviter_id]["invited_users"] += 1
+                
+                await bot.send_message(
+                    inviter_id,
+                    f"👤 Пользователь {user_id} перешел по вашей реферальной ссылке!"
+                )
+            
+            await message.answer("✅ Вы перешли по реферальной ссылке!")
     
     if user_data[user_id].get("in_chat", False):
         await message.answer("Вы находитесь в активном чате с продавцом.")
@@ -326,7 +333,6 @@ async def handle_profile(callback: CallbackQuery):
         f"💰 Баланс: {data.get('balance', 0):.2f} GRAM\n"
     )
     
-    # Дополнительная информация для основного бота
     if not IS_MIRROR:
         user_mirrors = mirrors.get(user_id, {})
         profile_text += f"👥 Приглашено: {data.get('invited_users', 0)}\n"
@@ -360,7 +366,6 @@ if not IS_MIRROR:
             f"`{ref_link}`\n"
             f"━━━━━━━━━━━━━━━━\n"
             f"👤 Приглашено: {invited} человек\n"
-            f"💰 Бонус: 2 GRAM за каждого приглашенного\n"
             f"━━━━━━━━━━━━━━━━\n"
             f"📤 Отправьте эту ссылку друзьям!"
         )
@@ -372,7 +377,6 @@ if not IS_MIRROR:
     async def handle_mirror(callback: CallbackQuery, state: FSMContext):
         user_id = callback.from_user.id
         
-        # Проверяем лимит зеркал (максимум 10)
         user_mirrors = mirrors.get(user_id, {})
         if len(user_mirrors) >= 10:
             await callback.answer("❌ Максимум 10 зеркал на пользователя!", show_alert=True)
@@ -398,7 +402,6 @@ if not IS_MIRROR:
         user_id = message.from_user.id
         token = message.text.strip()
         
-        # Проверяем токен
         is_valid, username = await check_token_valid(token)
         
         if not is_valid:
@@ -410,7 +413,6 @@ if not IS_MIRROR:
             )
             return
         
-        # Запускаем зеркало
         process = start_mirror_bot(token, username, ADMIN_ID)
         
         if process is None:
@@ -422,7 +424,6 @@ if not IS_MIRROR:
             await state.finish()
             return
         
-        # Сохраняем зеркало
         if user_id not in mirrors:
             mirrors[user_id] = {}
         
@@ -449,7 +450,7 @@ if not IS_MIRROR:
         await state.finish()
 
 # ============================================
-# ОБРАБОТЧИКИ ПОКУПОК (ДЛЯ ВСЕХ)
+# ОБРАБОТЧИКИ ПОКУПОК
 # ============================================
 
 @dp.callback_query_handler(lambda c: c.data == "back_to_main")
@@ -524,7 +525,6 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
     
     await state.finish()
     
-    # Сообщение пользователю
     await callback.message.edit_text(
         f"✅ Вы выбрали {product['emoji']} {product['name']}!\n"
         f"━━━━━━━━━━━━━━━━\n"
@@ -536,9 +536,7 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
         parse_mode="Markdown"
     )
     
-    # ✅ ЕСЛИ ЭТО ЗЕРКАЛО — ОТПРАВЛЯЕМ УВЕДОМЛЕНИЕ ОСНОВНОМУ АДМИНУ
     if IS_MIRROR:
-        # Отправляем уведомление основному админу (через основного бота)
         admin_message = (
             f"🔔 НОВАЯ ПОКУПКА В ЗЕРКАЛЕ!\n"
             f"━━━━━━━━━━━━━━━━\n"
@@ -557,7 +555,6 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
             reply_markup=get_admin_ticket_keyboard(ticket_number)
         )
     else:
-        # Основной бот — отправляем уведомление админу напрямую
         admin_message = (
             f"🔔 НОВАЯ ПОКУПКА!\n"
             f"━━━━━━━━━━━━━━━━\n"
@@ -691,7 +688,7 @@ if not IS_MIRROR:
         await callback.answer("✅ Тикет закрыт!")
 
 # ============================================
-# ЗАКРЫТИЕ ЧАТА ПОЛЬЗОВАТЕЛЕМ (ДЛЯ ВСЕХ)
+# ЗАКРЫТИЕ ЧАТА ПОЛЬЗОВАТЕЛЕМ
 # ============================================
 
 @dp.callback_query_handler(lambda c: c.data == "close_user_chat")
@@ -782,7 +779,7 @@ if not IS_MIRROR:
                 await message.answer("❌ Ошибка отправки")
 
 # ============================================
-# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (ДЛЯ ВСЕХ)
+# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # ============================================
 
 def check_cooldown(user_id: int) -> bool:
