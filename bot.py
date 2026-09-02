@@ -170,11 +170,6 @@ def get_admin_chat_keyboard(ticket_number: int):
     ))
     return keyboard
 
-def get_user_chat_keyboard():
-    keyboard = InlineKeyboardMarkup(row_width=1)
-    keyboard.add(InlineKeyboardButton(text="❌ Закрыть чат", callback_data="close_user_chat"))
-    return keyboard
-
 def get_back_keyboard():
     keyboard = InlineKeyboardMarkup(row_width=1)
     keyboard.add(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main"))
@@ -459,12 +454,12 @@ async def handle_accept_ticket(callback: CallbackQuery):
         reply_markup=get_admin_chat_keyboard(ticket_number)
     )
     
+    # ✅ ОТПРАВЛЯЕМ СООБЩЕНИЕ ПОКУПАТЕЛЮ БЕЗ КНОПКИ "ЗАКРЫТЬ ЧАТ"
     await bot.send_message(
         user_id,
         f"✅ Продавец принял ваш тикет #{ticket_number}!\n"
         f"━━━━━━━━━━━━━━━━\n"
-        f"💬 Теперь вы можете общаться с продавцом.",
-        reply_markup=get_user_chat_keyboard()
+        f"💬 Теперь вы можете общаться с продавцом."
     )
 
 @dp.callback_query_handler(lambda c: c.data.startswith("close_ticket_"))
@@ -523,38 +518,6 @@ async def handle_close_ticket(callback: CallbackQuery):
     if active_tickets:
         waiting_list = "\n".join([f"#{t}" for t in active_tickets.keys()])
         await bot.send_message(ADMIN_ID, f"📋 Ожидают принятия:\n{waiting_list}")
-
-# ============================================
-# ЗАКРЫТИЕ ЧАТА ПОЛЬЗОВАТЕЛЕМ
-# ============================================
-
-@dp.callback_query_handler(lambda c: c.data == "close_user_chat")
-async def handle_close_user_chat(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    
-    if user_id not in user_data or not user_data[user_id].get("in_chat", False):
-        await callback.answer("❌ У вас нет активного чата!", show_alert=True)
-        return
-    
-    ticket_number = user_data[user_id].get("ticket")
-    if ticket_number and ticket_number in active_tickets:
-        await callback.answer("❌ Вы не можете закрыть чат, пока тикет активен!", show_alert=True)
-        return
-    
-    user_data[user_id]["in_chat"] = False
-    
-    try:
-        await bot.delete_message(chat_id=user_id, message_id=callback.message.message_id)
-    except:
-        pass
-    
-    await bot.send_message(
-        user_id,
-        "🔚 Чат закрыт.\n"
-        "Для новых покупок используйте главное меню.",
-        reply_markup=get_main_keyboard()
-    )
-    await callback.answer()
 
 # ============================================
 # ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ
