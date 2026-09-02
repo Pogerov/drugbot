@@ -4,7 +4,6 @@ import random
 import os
 import threading
 import hashlib
-import json
 import sys
 from datetime import datetime, timedelta
 from typing import Dict, Optional
@@ -28,22 +27,6 @@ CRYPTO_WALLET = "UQDRRRGutl_ccP25XcwbOK-RN2UXuvE1_GFoerlaIDvmwO7I"
 BOT_USERNAME = "dfsddfagas_bot"
 
 # ============================================
-# РЕЖИМ БОТА
-# ============================================
-
-IS_MIRROR = False
-
-if len(sys.argv) > 1 and sys.argv[1] == "--mirror":
-    IS_MIRROR = True
-    try:
-        with open("mirror_config.json", "r") as f:
-            config = json.load(f)
-            MIRROR_TOKEN = config["token"]
-    except:
-        print("❌ Ошибка загрузки конфигурации зеркала!")
-        sys.exit(1)
-
-# ============================================
 # НАСТРОЙКА
 # ============================================
 
@@ -54,37 +37,31 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ============================================
-# FLASK
+# FLASK (ДЛЯ RENDER)
 # ============================================
 
-if not IS_MIRROR:
-    app = Flask(__name__)
+app = Flask(__name__)
 
-    @app.route('/')
-    def health_check():
-        return "Бот работает!", 200
+@app.route('/')
+def health_check():
+    return "Бот работает!", 200
 
-    @app.route('/health')
-    def health():
-        return "OK", 200
+@app.route('/health')
+def health():
+    return "OK", 200
 
-    def run_flask():
-        app.run(host='0.0.0.0', port=10000)
+def run_flask():
+    app.run(host='0.0.0.0', port=10000)
 
-    thread = threading.Thread(target=run_flask, daemon=True)
-    thread.start()
-    logger.info("🌐 Веб-сервер запущен на порту 10000")
+thread = threading.Thread(target=run_flask, daemon=True)
+thread.start()
+logger.info("🌐 Веб-сервер запущен на порту 10000")
 
 # ============================================
-# СОЗДАНИЕ БОТА
+# БОТ
 # ============================================
 
-if IS_MIRROR:
-    bot = Bot(token=MIRROR_TOKEN)
-    MAIN_BOT = Bot(token=BOT_TOKEN)
-else:
-    bot = Bot(token=BOT_TOKEN)
-
+bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
 dp.middleware.setup(LoggingMiddleware())
 
@@ -94,7 +71,6 @@ dp.middleware.setup(LoggingMiddleware())
 
 class PurchaseStates(StatesGroup):
     selecting_category = State()
-    waiting_for_mirror_token = State()
 
 PRODUCTS = {
     "меф": {"name": "Меф", "price": 15, "category": "соль", "emoji": "💎"},
@@ -106,7 +82,6 @@ PRODUCTS = {
 
 user_data: Dict[int, Dict] = {}
 active_tickets: Dict[int, Dict] = {}
-mirrors: Dict[int, Dict] = {}
 referral_data: Dict[int, Dict] = {}
 
 current_admin_chat: Optional[int] = None
@@ -125,42 +100,6 @@ def get_user_id_from_ref_code(ref_code: str) -> Optional[int]:
         if data.get("ref_code") == ref_code:
             return uid
     return None
-
-# ============================================
-# ПРОВЕРКА ТОКЕНА
-# ============================================
-
-async def check_token_valid(token: str) -> tuple:
-    try:
-        test_bot = Bot(token=token)
-        me = await test_bot.get_me()
-        return True, me.username
-    except:
-        return False, None
-
-# ============================================
-# ЗАПУСК ЗЕРКАЛА
-# ============================================
-
-def start_mirror_bot(token: str, username: str):
-    try:
-        config = {"token": token}
-        with open("mirror_config.json", "w") as f:
-            json.dump(config, f)
-        
-        import subprocess
-        process = subprocess.Popen(
-            [sys.executable, "bot.py", "--mirror"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        
-        logger.info(f"🪞 Зеркало @{username} запущено (PID: {process.pid})")
-        return process
-    except Exception as e:
-        logger.error(f"Ошибка запуска зеркала: {e}")
-        return None
 
 # ============================================
 # АВТОМАТИЧЕСКАЯ РЕГИСТРАЦИЯ
@@ -192,11 +131,7 @@ def get_main_keyboard():
     keyboard = InlineKeyboardMarkup(row_width=1)
     keyboard.add(InlineKeyboardButton(text="💠 Купить нарк0тy 💠", callback_data="buy"))
     keyboard.add(InlineKeyboardButton(text="👤 Профиль", callback_data="profile"))
-    
-    if not IS_MIRROR:
-        keyboard.add(InlineKeyboardButton(text="🔗 Реферальная ссылка", callback_data="referral"))
-        keyboard.add(InlineKeyboardButton(text="🪞 Создать зеркало", callback_data="mirror"))
-    
+    keyboard.add(InlineKeyboardButton(text="🔗 Реферальная ссылка", callback_data="referral"))
     return keyboard
 
 def get_categories_keyboard():
@@ -287,7 +222,7 @@ async def cmd_start(message: Message, state: FSMContext):
     
     auto_register(user_id)
     
-    if not IS_MIRROR and args and args.startswith("ref_"):
+    if args and args.startswith("ref_"):
         ref_code = args[4:]
         inviter_id = get_user_id_from_ref_code(ref_code)
         
@@ -343,134 +278,33 @@ async def handle_profile(callback: CallbackQuery):
         f"📦 Покупки сегодня: {data.get('purchases_today', 0)}/2\n"
         f"🔄 Всего покупок: {data.get('total_purchases', 0)}\n"
         f"💰 Баланс: {data.get('balance', 0):.2f} GRAM\n"
+        f"👥 Приглашено: {data.get('invited_users', 0)}\n"
+        f"🆔 ID: {user_id}\n"
+        f"━━━━━━━━━━━━━━━━"
     )
-    
-    if not IS_MIRROR:
-        user_mirrors = mirrors.get(user_id, {})
-        profile_text += f"👥 Приглашено: {data.get('invited_users', 0)}\n"
-        profile_text += f"🪞 Зеркал создано: {len(user_mirrors)}\n"
-    
-    profile_text += f"🆔 ID: {user_id}\n"
-    profile_text += f"━━━━━━━━━━━━━━━━"
     
     await callback.message.edit_text(profile_text, reply_markup=get_back_keyboard())
     await callback.answer()
 
-# ============================================
-# ТОЛЬКО ДЛЯ ОСНОВНОГО БОТА
-# ============================================
-
-if not IS_MIRROR:
+@dp.callback_query_handler(lambda c: c.data == "referral")
+async def handle_referral(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    auto_register(user_id)
     
-    @dp.callback_query_handler(lambda c: c.data == "referral")
-    async def handle_referral(callback: CallbackQuery):
-        user_id = callback.from_user.id
-        auto_register(user_id)
-        
-        ref_link = generate_referral_link(user_id)
-        invited = user_data[user_id].get("invited_users", 0)
-        
-        text = (
-            f"🔗 Ваша реферальная ссылка:\n"
-            f"`{ref_link}`\n"
-            f"━━━━━━━━━━━━━━━━\n"
-            f"👤 Приглашено: {invited} человек\n"
-            f"━━━━━━━━━━━━━━━━\n"
-            f"📤 Отправьте эту ссылку друзьям!"
-        )
-        
-        await callback.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
-        await callback.answer()
+    ref_link = generate_referral_link(user_id)
+    invited = user_data[user_id].get("invited_users", 0)
     
-    @dp.callback_query_handler(lambda c: c.data == "mirror")
-    async def handle_mirror(callback: CallbackQuery, state: FSMContext):
-        user_id = callback.from_user.id
-        auto_register(user_id)
-        
-        user_mirrors = mirrors.get(user_id, {})
-        if len(user_mirrors) >= 10:
-            await callback.answer("❌ Максимум 10 зеркал на пользователя!", show_alert=True)
-            return
-        
-        text = (
-            "🪞 СОЗДАНИЕ ЗЕРКАЛА\n"
-            "━━━━━━━━━━━━━━━━\n"
-            "1️⃣ Создайте нового бота в @BotFather\n"
-            "2️⃣ Скопируйте его токен\n"
-            "3️⃣ Вставьте токен сюда\n"
-            "━━━━━━━━━━━━━━━━\n"
-            "❗ Все тикеты будут приходить основному админу.\n"
-            "❌ Напишите /cancel для отмены."
-        )
-        
-        await callback.message.edit_text(text, reply_markup=get_back_keyboard())
-        await state.set_state(PurchaseStates.waiting_for_mirror_token)
-        await callback.answer()
+    text = (
+        f"🔗 Ваша реферальная ссылка:\n"
+        f"`{ref_link}`\n"
+        f"━━━━━━━━━━━━━━━━\n"
+        f"👤 Приглашено: {invited} человек\n"
+        f"━━━━━━━━━━━━━━━━\n"
+        f"📤 Отправьте эту ссылку друзьям!"
+    )
     
-    @dp.message_handler(state=PurchaseStates.waiting_for_mirror_token)
-    async def process_mirror_token(message: Message, state: FSMContext):
-        user_id = message.from_user.id
-        token = message.text.strip()
-        
-        is_valid, username = await check_token_valid(token)
-        
-        if not is_valid:
-            await message.answer(
-                "❌ НЕДЕЙСТВИТЕЛЬНЫЙ ТОКЕН!\n"
-                "Убедитесь, что вы правильно скопировали токен из @BotFather.\n"
-                "Попробуйте снова или напишите /cancel",
-                reply_markup=get_back_keyboard()
-            )
-            return
-        
-        process = start_mirror_bot(token, username)
-        
-        if process is None:
-            await message.answer(
-                "❌ Ошибка при создании зеркала!\n"
-                "Попробуйте позже.",
-                reply_markup=get_main_keyboard()
-            )
-            await state.finish()
-            return
-        
-        if user_id not in mirrors:
-            mirrors[user_id] = {}
-        
-        mirrors[user_id][username] = {
-            "token": token,
-            "created_at": datetime.now().strftime("%d.%m.%Y %H:%M"),
-            "active": True,
-            "process": process
-        }
-        
-        await message.answer(
-            f"✅ ЗЕРКАЛО СОЗДАНО УСПЕШНО!\n"
-            f"━━━━━━━━━━━━━━━━\n"
-            f"🤖 Бот: @{username}\n"
-            f"📅 Создан: {datetime.now().strftime('%d.%m.%Y %H:%M')}\n"
-            f"🪞 Всего зеркал: {len(mirrors[user_id])}/10\n"
-            f"━━━━━━━━━━━━━━━━\n"
-            f"🔗 Ссылка: https://t.me/{username}\n"
-            f"━━━━━━━━━━━━━━━━\n"
-            f"✅ Все тикеты будут приходить основному админу @{BOT_USERNAME}.",
-            reply_markup=get_main_keyboard()
-        )
-        
-        await bot.send_message(
-            ADMIN_ID,
-            f"🪞 НОВОЕ ЗЕРКАЛО!\n"
-            f"━━━━━━━━━━━━━━━━\n"
-            f"👤 Создал: {user_id}\n"
-            f"🤖 Бот: @{username}\n"
-            f"📅 Создан: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-        )
-        
-        await state.finish()
-
-# ============================================
-# ПОКУПКИ
-# ============================================
+    await callback.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
+    await callback.answer()
 
 @dp.callback_query_handler(lambda c: c.data == "back_to_main")
 async def handle_back_to_main(callback: CallbackQuery, state: FSMContext):
@@ -508,7 +342,7 @@ async def handle_category(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 # ============================================
-# ✅ ИСПРАВЛЕННАЯ ФУНКЦИЯ ПОКУПКИ
+# ПОКУПКА (СОЗДАНИЕ ТИКЕТА)
 # ============================================
 
 @dp.callback_query_handler(lambda c: c.data.startswith("product_"))
@@ -535,7 +369,7 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
     user_data[user_id]["purchases_today"] += 1
     user_data[user_id]["total_purchases"] += 1
     user_data[user_id]["ticket"] = ticket_number
-    user_data[user_id]["in_chat"] = True  # ✅ ВАЖНО: помечаем, что пользователь в чате
+    user_data[user_id]["in_chat"] = True
     
     if user_data[user_id]["purchases_today"] >= 2:
         user_data[user_id]["cooldown_until"] = datetime.now() + timedelta(hours=24)
@@ -562,41 +396,22 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
         parse_mode="Markdown"
     )
     
-    if IS_MIRROR:
-        admin_message = (
-            f"🔔 НОВАЯ ПОКУПКА В ЗЕРКАЛЕ!\n"
-            f"━━━━━━━━━━━━━━━━\n"
-            f"🎫 Тикет: #{ticket_number}\n"
-            f"👤 Пользователь: {user_id}\n"
-            f"📦 Товар: {product['name']}\n"
-            f"💰 Сумма: {product['price']} GRAM\n"
-            f"🤖 Бот: @{BOT_USERNAME}\n"
-            f"━━━━━━━━━━━━━━━━\n"
-            f"Ожидает принятия!"
-        )
-        
-        await MAIN_BOT.send_message(
-            ADMIN_ID,
-            admin_message,
-            reply_markup=get_admin_ticket_keyboard(ticket_number)
-        )
-    else:
-        admin_message = (
-            f"🔔 НОВАЯ ПОКУПКА!\n"
-            f"━━━━━━━━━━━━━━━━\n"
-            f"🎫 Тикет: #{ticket_number}\n"
-            f"👤 Пользователь: {user_id}\n"
-            f"📦 Товар: {product['name']}\n"
-            f"💰 Сумма: {product['price']} GRAM\n"
-            f"━━━━━━━━━━━━━━━━\n"
-            f"Ожидает принятия!"
-        )
-        
-        await bot.send_message(
-            ADMIN_ID,
-            admin_message,
-            reply_markup=get_admin_ticket_keyboard(ticket_number)
-        )
+    admin_message = (
+        f"🔔 НОВАЯ ПОКУПКА!\n"
+        f"━━━━━━━━━━━━━━━━\n"
+        f"🎫 Тикет: #{ticket_number}\n"
+        f"👤 Пользователь: {user_id}\n"
+        f"📦 Товар: {product['name']}\n"
+        f"💰 Сумма: {product['price']} GRAM\n"
+        f"━━━━━━━━━━━━━━━━\n"
+        f"Ожидает принятия!"
+    )
+    
+    await bot.send_message(
+        ADMIN_ID,
+        admin_message,
+        reply_markup=get_admin_ticket_keyboard(ticket_number)
+    )
     
     await callback.answer("✅ Тикет создан!")
 
@@ -604,114 +419,113 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
 # АДМИН
 # ============================================
 
-if not IS_MIRROR:
+@dp.callback_query_handler(lambda c: c.data.startswith("accept_ticket_"))
+async def handle_accept_ticket(callback: CallbackQuery):
+    global current_admin_chat, current_admin_user
     
-    @dp.callback_query_handler(lambda c: c.data.startswith("accept_ticket_"))
-    async def handle_accept_ticket(callback: CallbackQuery):
-        global current_admin_chat, current_admin_user
-        
-        if callback.from_user.id != ADMIN_ID:
-            await callback.answer("❌ Нет доступа!", show_alert=True)
-            return
-        
-        ticket_number = int(callback.data.split("_")[2])
-        
-        if ticket_number not in active_tickets:
-            await callback.answer("❌ Тикет не найден!", show_alert=True)
-            return
-        
-        if current_admin_chat is not None:
-            await callback.answer(f"❌ Активен чат #{current_admin_chat}!", show_alert=True)
-            return
-        
-        ticket = active_tickets[ticket_number]
-        user_id = ticket["user_id"]
-        
-        current_admin_chat = ticket_number
-        current_admin_user = user_id
-        
-        if user_id in user_data:
-            user_data[user_id]["in_chat"] = True
-        
-        await callback.answer("✅ Тикет принят!")
-        
-        await callback.message.edit_text(
-            f"✅ Тикет #{ticket_number} ПРИНЯТ!\n"
-            f"━━━━━━━━━━━━━━━━\n"
-            f"👤 Пользователь: {user_id}\n"
-            f"📦 Товар: {ticket['product']}\n"
-            f"💰 Сумма: {ticket['price']} GRAM\n"
-            f"━━━━━━━━━━━━━━━━\n"
-            f"💬 Теперь вы общаетесь с клиентом.",
-            reply_markup=get_admin_chat_keyboard(ticket_number)
-        )
-        
-        await bot.send_message(
-            user_id,
-            f"✅ Продавец принял ваш тикет #{ticket_number}!\n"
-            f"━━━━━━━━━━━━━━━━\n"
-            f"💬 Теперь вы можете общаться с продавцом.",
-            reply_markup=get_user_chat_keyboard()
-        )
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("❌ Нет доступа!", show_alert=True)
+        return
     
-    @dp.callback_query_handler(lambda c: c.data.startswith("close_ticket_"))
-    async def handle_close_ticket(callback: CallbackQuery):
-        global current_admin_chat, current_admin_user
-        
-        if callback.from_user.id != ADMIN_ID:
-            await callback.answer("❌ Нет доступа!", show_alert=True)
-            return
-        
-        ticket_number = int(callback.data.split("_")[2])
-        
-        if current_admin_chat != ticket_number:
-            await callback.answer("❌ Тикет не активен!", show_alert=True)
-            return
-        
-        if ticket_number not in active_tickets:
-            await callback.answer("❌ Тикет не найден!", show_alert=True)
-            return
-        
-        ticket = active_tickets[ticket_number]
-        user_id = ticket["user_id"]
-        
-        await callback.answer("✅ Тикет закрывается...")
-        
-        try:
-            await delete_chat_messages(user_id)
-            logger.info(f"✅ Сообщения удалены у пользователя {user_id}")
-        except Exception as e:
-            logger.error(f"Ошибка удаления сообщений у пользователя: {e}")
-        
-        if user_id in user_data:
-            user_data[user_id]["in_chat"] = False
-            user_data[user_id]["ticket"] = None
-            user_data[user_id]["total_purchases"] += 1
-        
-        del active_tickets[ticket_number]
-        
-        current_admin_chat = None
-        current_admin_user = None        
-        try:
-            await bot.delete_message(chat_id=ADMIN_ID, message_id=callback.message.message_id)
-        except:
-            pass
-        
-        await bot.send_message(
-            ADMIN_ID,
-            f"❌ Тикет #{ticket_number} ЗАКРЫТ!\n"
-            f"━━━━━━━━━━━━━━━━\n"
-            f"Покупка завершена.\n"
-            f"━━━━━━━━━━━━━━━━\n"
-            f"✅ Можно принять новый тикет."
-        )
-        
-        if active_tickets:
-            waiting_list = "\n".join([f"#{t}" for t in active_tickets.keys()])
-            await bot.send_message(ADMIN_ID, f"📋 Ожидают принятия:\n{waiting_list}")
+    ticket_number = int(callback.data.split("_")[2])
+    
+    if ticket_number not in active_tickets:
+        await callback.answer("❌ Тикет не найден!", show_alert=True)
+        return
+    
+    if current_admin_chat is not None:
+        await callback.answer(f"❌ Активен чат #{current_admin_chat}!", show_alert=True)
+        return
+    
+    ticket = active_tickets[ticket_number]
+    user_id = ticket["user_id"]
+    
+    current_admin_chat = ticket_number
+    current_admin_user = user_id
+    
+    if user_id in user_data:
+        user_data[user_id]["in_chat"] = True
+    
+    await callback.answer("✅ Тикет принят!")
+    
+    await callback.message.edit_text(
+        f"✅ Тикет #{ticket_number} ПРИНЯТ!\n"
+        f"━━━━━━━━━━━━━━━━\n"
+        f"👤 Пользователь: {user_id}\n"
+        f"📦 Товар: {ticket['product']}\n"
+        f"💰 Сумма: {ticket['price']} GRAM\n"
+        f"━━━━━━━━━━━━━━━━\n"
+        f"💬 Теперь вы общаетесь с клиентом.",
+        reply_markup=get_admin_chat_keyboard(ticket_number)
+    )
+    
+    await bot.send_message(
+        user_id,
+        f"✅ Продавец принял ваш тикет #{ticket_number}!\n"
+        f"━━━━━━━━━━━━━━━━\n"
+        f"💬 Теперь вы можете общаться с продавцом.",
+        reply_markup=get_user_chat_keyboard()
+    )
+
+@dp.callback_query_handler(lambda c: c.data.startswith("close_ticket_"))
+async def handle_close_ticket(callback: CallbackQuery):
+    global current_admin_chat, current_admin_user
+    
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("❌ Нет доступа!", show_alert=True)
+        return
+    
+    ticket_number = int(callback.data.split("_")[2])
+    
+    if current_admin_chat != ticket_number:
+        await callback.answer("❌ Тикет не активен!", show_alert=True)
+        return
+    
+    if ticket_number not in active_tickets:
+        await callback.answer("❌ Тикет не найден!", show_alert=True)
+        return
+    
+    ticket = active_tickets[ticket_number]
+    user_id = ticket["user_id"]
+    
+    await callback.answer("✅ Тикет закрывается...")
+    
+    try:
+        await delete_chat_messages(user_id)
+        logger.info(f"✅ Сообщения удалены у пользователя {user_id}")
+    except Exception as e:
+        logger.error(f"Ошибка удаления сообщений у пользователя: {e}")
+    
+    if user_id in user_data:
+        user_data[user_id]["in_chat"] = False
+        user_data[user_id]["ticket"] = None
+        user_data[user_id]["total_purchases"] += 1
+    
+    del active_tickets[ticket_number]
+    
+    current_admin_chat = None
+    current_admin_user = None
+    
+    try:
+        await bot.delete_message(chat_id=ADMIN_ID, message_id=callback.message.message_id)
+    except:
+        pass
+    
+    await bot.send_message(
+        ADMIN_ID,
+        f"❌ Тикет #{ticket_number} ЗАКРЫТ!\n"
+        f"━━━━━━━━━━━━━━━━\n"
+        f"Покупка завершена.\n"
+        f"━━━━━━━━━━━━━━━━\n"
+        f"✅ Можно принять новый тикет."
+    )
+    
+    if active_tickets:
+        waiting_list = "\n".join([f"#{t}" for t in active_tickets.keys()])
+        await bot.send_message(ADMIN_ID, f"📋 Ожидают принятия:\n{waiting_list}")
 
 # ============================================
-# ЗАКРЫТИЕ ЧАТА
+# ЗАКРЫТИЕ ЧАТА ПОЛЬЗОВАТЕЛЕМ
 # ============================================
 
 @dp.callback_query_handler(lambda c: c.data == "close_user_chat")
@@ -743,7 +557,7 @@ async def handle_close_user_chat(callback: CallbackQuery):
     await callback.answer()
 
 # ============================================
-# ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ (ИСПРАВЛЕНО)
+# ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ
 # ============================================
 
 @dp.message_handler(content_types=['text'])
@@ -753,13 +567,7 @@ async def handle_all_text_messages(message: Message, state: FSMContext):
     user_id = message.from_user.id
     text = message.text
     
-    # ✅ ПЕРВАЯ ПРОВЕРКА: зеркало
-    current_state = await state.get_state()
-    if current_state == "PurchaseStates:waiting_for_mirror_token":
-        await process_mirror_token(message, state)
-        return
-    
-    # ✅ ВТОРАЯ ПРОВЕРКА: если это админ
+    # ✅ Если это админ
     if user_id == ADMIN_ID:
         if current_admin_chat is not None and current_admin_chat in active_tickets:
             try:
@@ -774,7 +582,7 @@ async def handle_all_text_messages(message: Message, state: FSMContext):
         await message.answer("❌ Нет активного чата. Примите тикет сначала.")
         return
     
-    # ✅ ТРЕТЬЯ ПРОВЕРКА: если у пользователя есть активный тикет
+    # ✅ Если у пользователя есть активный тикет
     ticket_number = user_data.get(user_id, {}).get("ticket")
     in_chat = user_data.get(user_id, {}).get("in_chat", False)
     
@@ -787,7 +595,7 @@ async def handle_all_text_messages(message: Message, state: FSMContext):
             await message.answer("❌ Ошибка отправки")
         return
     
-    # ✅ ВСЕ ОСТАЛЬНЫЕ: пользователь без тикета
+    # ✅ Пользователь без тикета
     await message.answer("❌ Чтобы общаться с продавцом, сначала сделайте покупку через кнопку '💠 Купить нарк0тy'.")
 
 # ============================================
@@ -821,13 +629,9 @@ def check_purchase_limit(user_id: int) -> bool:
 # ============================================
 
 async def on_startup(dp):
-    if IS_MIRROR:
-        logger.info("🪞 Зеркальный бот запущен! Все тикеты идут основному админу.")
-    else:
-        logger.info("🚀 Основной бот запущен!")
-        logger.info(f"👤 Админ: {ADMIN_ID}")
-        logger.info(f"🤖 Бот: @{BOT_USERNAME}")
-    
+    logger.info("🚀 Бот запущен!")
+    logger.info(f"👤 Админ: {ADMIN_ID}")
+    logger.info(f"🤖 Бот: @{BOT_USERNAME}")
     logger.info("✅ Бот готов!")
 
 if __name__ == "__main__":
