@@ -72,12 +72,45 @@ dp.middleware.setup(LoggingMiddleware())
 class PurchaseStates(StatesGroup):
     selecting_category = State()
 
+# ============================================
+# РАСШИРЕННЫЙ АССОРТИМЕНТ НАРКОТИКОВ
+# ============================================
+
 PRODUCTS = {
-    "меф": {"name": "Меф", "price": 15, "category": "соль", "emoji": "💎"},
+    # ===== СОЛИ (СТИМУЛЯТОРЫ) =====
+    "меф": {"name": "Мефедрон", "price": 15, "category": "соль", "emoji": "💎"},
     "a-pvp": {"name": "a-PvP", "price": 9, "category": "соль", "emoji": "⚗️"},
     "мдвп": {"name": "МДВП", "price": 13, "category": "соль", "emoji": "🧪"},
+    "скорость": {"name": "Скорость", "price": 7, "category": "соль", "emoji": "⚡"},
+    "кристаллы": {"name": "Кристаллы", "price": 20, "category": "соль", "emoji": "💠"},
+    "экстази": {"name": "Экстази", "price": 18, "category": "соль", "emoji": "🎯"},
+    
+    # ===== КАННАБИНОИДЫ =====
     "гашиш": {"name": "ГашNш", "price": 12, "category": "каннибиноиды", "emoji": "🌿"},
     "марихуанна": {"name": "Марихуанна", "price": 8, "category": "каннибиноиды", "emoji": "🍃"},
+    "шишки": {"name": "Шишки", "price": 14, "category": "каннибиноиды", "emoji": "🌲"},
+    "масло": {"name": "Масло THC", "price": 25, "category": "каннибиноиды", "emoji": "💧"},
+    "спайс": {"name": "Спайс", "price": 10, "category": "каннибиноиды", "emoji": "🔥"},
+    
+    # ===== ОПИОИДЫ =====
+    "героин": {"name": "Героин", "price": 30, "category": "опиоиды", "emoji": "☠️"},
+    "метадон": {"name": "Метадон", "price": 22, "category": "опиоиды", "emoji": "💊"},
+    "трамадол": {"name": "Трамадол", "price": 11, "category": "опиоиды", "emoji": "💉"},
+    "фентанил": {"name": "Фентанил", "price": 40, "category": "опиоиды", "emoji": "⚰️"},
+    "кодеин": {"name": "Кодеин", "price": 9, "category": "опиоиды", "emoji": "🍬"},
+    "морфин": {"name": "Морфин", "price": 27, "category": "опиоиды", "emoji": "🏥"},
+    
+    # ===== ПСИХЕДЕЛИКИ =====
+    "лсд": {"name": "ЛСД", "price": 16, "category": "психоделики", "emoji": "🌈"},
+    "грибы": {"name": "Грибы", "price": 12, "category": "психоделики", "emoji": "🍄"},
+    "dmt": {"name": "DMT", "price": 35, "category": "психоделики", "emoji": "👁️"},
+    "мескалин": {"name": "Мескалин", "price": 28, "category": "психоделики", "emoji": "🌵"},
+    "2cb": {"name": "2C-B", "price": 20, "category": "психоделики", "emoji": "🎨"},
+    
+    # ===== ДИССОЦИАТИВЫ =====
+    "кетамин": {"name": "Кетамин", "price": 17, "category": "диссоциативы", "emoji": "🐴"},
+    "pcp": {"name": "PCP", "price": 19, "category": "диссоциативы", "emoji": "🧊"},
+    "декс": {"name": "Декстрометорфан", "price": 8, "category": "диссоциативы", "emoji": "🤖"},
 }
 
 user_data: Dict[int, Dict] = {}
@@ -124,7 +157,7 @@ def auto_register(user_id: int):
         }
 
 # ============================================
-# КЛАВИАТУРЫ
+# ОБНОВЛЕННЫЕ КЛАВИАТУРЫ
 # ============================================
 
 def get_main_keyboard():
@@ -137,8 +170,11 @@ def get_main_keyboard():
 def get_categories_keyboard():
     keyboard = InlineKeyboardMarkup(row_width=1)
     keyboard.add(
-        InlineKeyboardButton(text="🧂 Соль", callback_data="category_salt"),
+        InlineKeyboardButton(text="🧂 Соль (Стимуляторы)", callback_data="category_salt"),
         InlineKeyboardButton(text="🌿 Каннибиноиды", callback_data="category_cannabis"),
+        InlineKeyboardButton(text="☠️ Опиоиды", callback_data="category_opioids"),
+        InlineKeyboardButton(text="🌈 Психоделики", callback_data="category_psychedelics"),
+        InlineKeyboardButton(text="🐴 Диссоциативы", callback_data="category_dissociatives"),
         InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main")
     )
     return keyboard
@@ -239,7 +275,7 @@ async def cmd_start(message: Message, state: FSMContext):
     
     welcome_text = (
         "Привет, это бот для покупки наркотиков!\n"
-        "Здесь есть ассортимент наркотиков по типу солей, каннибиноиды.\n"
+        "Здесь есть ассортимент наркотиков по типу солей, каннибиноидов, опиоидов, психеделиков и диссоциативов.\n"
         "После выбора товара создается тикет, и вы общаетесь с продавцом напрямую.\n"
         "Оплата производится в криптовалюте GRAM.\n"
         "Всех благ и хороших покупок."
@@ -310,7 +346,7 @@ async def handle_back_to_main(callback: CallbackQuery, state: FSMContext):
     
     welcome_text = (
         "Привет, это бот для покупки наркотиков!\n"
-        "Здесь есть ассортимент наркотиков по типу солей, каннибиноиды.\n"
+        "Здесь есть ассортимент наркотиков по типу солей, каннибиноидов, опиоидов, психеделиков и диссоциативов.\n"
         "После выбора товара создается тикет, и вы общаетесь с продавцом напрямую.\n"
         "Оплата производится в криптовалюте GRAM.\n"
         "Всех благ и хороших покупок."
@@ -327,7 +363,13 @@ async def handle_back_to_categories(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query_handler(lambda c: c.data.startswith("category_"))
 async def handle_category(callback: CallbackQuery, state: FSMContext):
     category = callback.data.split("_")[1]
-    category_map = {"salt": "соль", "cannabis": "каннибиноиды"}
+    category_map = {
+        "salt": "соль", 
+        "cannabis": "каннибиноиды",
+        "opioids": "опиоиды",
+        "psychedelics": "психоделики",
+        "dissociatives": "диссоциативы"
+    }
     category_name = category_map.get(category, "")
     
     await callback.message.edit_text(
@@ -454,7 +496,6 @@ async def handle_accept_ticket(callback: CallbackQuery):
         reply_markup=get_admin_chat_keyboard(ticket_number)
     )
     
-    # ✅ ОТПРАВЛЯЕМ СООБЩЕНИЕ ПОКУПАТЕЛЮ БЕЗ КНОПКИ "ЗАКРЫТЬ ЧАТ"
     await bot.send_message(
         user_id,
         f"✅ Продавец принял ваш тикет #{ticket_number}!\n"
@@ -530,7 +571,6 @@ async def handle_all_text_messages(message: Message, state: FSMContext):
     user_id = message.from_user.id
     text = message.text
     
-    # ✅ Если это админ
     if user_id == ADMIN_ID:
         if current_admin_chat is not None and current_admin_chat in active_tickets:
             try:
@@ -545,7 +585,6 @@ async def handle_all_text_messages(message: Message, state: FSMContext):
         await message.answer("❌ Нет активного чата. Примите тикет сначала.")
         return
     
-    # ✅ Если у пользователя есть активный тикет
     ticket_number = user_data.get(user_id, {}).get("ticket")
     in_chat = user_data.get(user_id, {}).get("in_chat", False)
     
@@ -558,7 +597,6 @@ async def handle_all_text_messages(message: Message, state: FSMContext):
             await message.answer("❌ Ошибка отправки")
         return
     
-    # ✅ Пользователь без тикета
     await message.answer("❌ Чтобы общаться с продавцом, сначала сделайте покупку через кнопку '💠 Купить нарк0тy'.")
 
 # ============================================
