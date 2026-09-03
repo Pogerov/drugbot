@@ -27,8 +27,8 @@ BOT_USERNAME = "dfsddfagas_bot"
 # АДРЕС ТВОЕГО API НА RENDER
 # ============================================
 
-API_URL = "https://drug-market.onrender.com/api"
-SITE_URL = "https://drug-market.onrender.com"
+API_URL = "https://drug-market.onrender.com/api"  # ← ЗАМЕНИ НА СВОЮ ССЫЛКУ
+SITE_URL = "https://drug-market.onrender.com"     # ← ЗАМЕНИ НА СВОЮ ССЫЛКУ
 
 # ============================================
 # НАСТРОЙКА ЛОГИРОВАНИЯ
@@ -95,8 +95,11 @@ def censor_drugs(text: str) -> str:
     return result
 
 # ============================================
-# ТОВАРЫ
+# ДАННЫЕ
 # ============================================
+
+class PurchaseStates(StatesGroup):
+    selecting_category = State()
 
 PRODUCTS = {
     "меф": {"name": "Мефедрон", "price": 15, "category": "соль", "emoji": "💎"},
@@ -133,7 +136,7 @@ current_admin_chat: Optional[int] = None
 current_admin_user: Optional[int] = None
 
 # ============================================
-# КЛАВИАТУРЫ
+# КЛАВИАТУРЫ (БЕЗ КНОПКИ "НАШ САЙТ")
 # ============================================
 
 def get_main_keyboard():
@@ -141,7 +144,6 @@ def get_main_keyboard():
     keyboard.add(InlineKeyboardButton(text="💠 Купить 💠", callback_data="buy"))
     keyboard.add(InlineKeyboardButton(text="👤 Профиль", callback_data="profile"))
     keyboard.add(InlineKeyboardButton(text="🔗 Реферальная ссылка", callback_data="referral"))
-    keyboard.add(InlineKeyboardButton(text="🌐 Наш сайт", callback_data="site"))
     return keyboard
 
 def get_categories_keyboard():
@@ -160,7 +162,6 @@ def get_products_keyboard(category: str):
     keyboard = InlineKeyboardMarkup(row_width=1)
     for key, product in PRODUCTS.items():
         if product["category"] == category:
-            # ТОЛЬКО НАЗВАНИЕ НАРКОТИКА В LEET
             leet_name = censor_drugs(product['name'])
             keyboard.add(InlineKeyboardButton(
                 text=f"{product['emoji']} {leet_name} - {product['price']} GRAM",
@@ -189,6 +190,10 @@ def get_back_keyboard():
     keyboard = InlineKeyboardMarkup(row_width=1)
     keyboard.add(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main"))
     return keyboard
+
+# ============================================
+# РЕФЕРАЛЬНАЯ СИСТЕМА
+# ============================================
 
 def generate_referral_link(user_id: int) -> str:
     ref_code = hashlib.md5(str(user_id).encode()).hexdigest()[:8]
@@ -277,8 +282,8 @@ async def cmd_start(message: Message, state: FSMContext):
         return
     
     welcome_text = (
-        "Привет! Это бот для покупок.\n"
-        "Здесь есть ассортимент продуктов по разным категориям.\n"
+        "Привет, это бот для покупок.\n"
+        "Здесь есть ассортимент товаров по разным категориям.\n"
         "После выбора товара создается тикет, и вы общаетесь с продавцом напрямую.\n"
         "Оплата производится в криптовалюте GRAM.\n"
         "Всех благ и хороших покупок.\n\n"
@@ -287,15 +292,6 @@ async def cmd_start(message: Message, state: FSMContext):
     )
     await message.answer(welcome_text, reply_markup=get_main_keyboard())
     await state.finish()
-
-@dp.callback_query_handler(lambda c: c.data == "site")
-async def handle_site(callback: CallbackQuery):
-    await callback.message.answer(
-        f"🌐 Наш сайт для покупок:\n"
-        f"{SITE_URL}\n\n"
-        f"📱 Удобно, быстро, анонимно!"
-    )
-    await callback.answer()
 
 @dp.callback_query_handler(lambda c: c.data == "buy")
 async def handle_buy(callback: CallbackQuery, state: FSMContext):
@@ -359,8 +355,8 @@ async def handle_back_to_main(callback: CallbackQuery, state: FSMContext):
         return
     
     welcome_text = (
-        "Привет! Это бот для покупок.\n"
-        "Здесь есть ассортимент продуктов по разным категориям.\n"
+        "Привет, это бот для покупок.\n"
+        "Здесь есть ассортимент товаров по разным категориям.\n"
         "После выбора товара создается тикет, и вы общаетесь с продавцом напрямую.\n"
         "Оплата производится в криптовалюте GRAM.\n"
         "Всех благ и хороших покупок.\n\n"
@@ -388,7 +384,6 @@ async def handle_category(callback: CallbackQuery, state: FSMContext):
     }
     category_name = category_map.get(category, "")
     
-    # Цензурируем ТОЛЬКО название категории (если это наркотик)
     censored_category = censor_drugs(category_name)
     
     await callback.message.edit_text(
@@ -441,7 +436,6 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
     
     await state.finish()
     
-    # ТОЛЬКО НАЗВАНИЕ НАРКОТИКА В LEET
     leet_name = censor_drugs(product['name'])
     
     await callback.message.edit_text(
@@ -647,7 +641,6 @@ async def handle_ticket_from_site(message: Message):
                     json={'ticket_number': ticket_number}
                 )
                 
-                # ТОЛЬКО НАЗВАНИЕ НАРКОТИКА В LEET
                 leet_name = censor_drugs(product_name)
                 
                 await message.answer(
