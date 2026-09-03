@@ -27,8 +27,8 @@ BOT_USERNAME = "dfsddfagas_bot"
 # АДРЕС ТВОЕГО API НА RENDER
 # ============================================
 
-API_URL = "https://drug-market.onrender.com/api"  # ← ЗАМЕНИ НА СВОЮ ССЫЛКУ
-SITE_URL = "https://drug-market.onrender.com"     # ← ЗАМЕНИ НА СВОЮ ССЫЛКУ
+API_URL = "https://drug-market.onrender.com/api"
+SITE_URL = "https://drug-market.onrender.com"
 
 # ============================================
 # НАСТРОЙКА ЛОГИРОВАНИЯ
@@ -49,45 +49,79 @@ dp = Dispatcher(bot)
 dp.middleware.setup(LoggingMiddleware())
 
 # ============================================
-# ДАННЫЕ
+# LEET-ЦЕНЗУРА ТОЛЬКО ДЛЯ НАРКОТИКОВ
 # ============================================
 
-class PurchaseStates(StatesGroup):
-    selecting_category = State()
+DRUG_LEET = {
+    "мефедрон": "MeF",
+    "a-pvp": "a-PvP",
+    "мдвп": "MDVP",
+    "скорость": "Ck0p0ctb",
+    "кристаллы": "KpucTaLLbl",
+    "экстази": "3kcta3u",
+    "гашиш": "GaWuw",
+    "марихуанна": "MapuxyaHHa",
+    "шишки": "Wuwku",
+    "спайс": "Cnauc",
+    "героин": "Gep0uH",
+    "метадон": "MeTaDoH",
+    "трамадол": "TpamaDoL",
+    "фентанил": "FeHTaHuL",
+    "кодеин": "KoDeuH",
+    "морфин": "MopHuH",
+    "лсд": "LSD",
+    "грибы": "Gpu6bl",
+    "dmt": "DMT",
+    "мескалин": "MeCkaLuH",
+    "2c-b": "2C-B",
+    "кетамин": "KeTaMuH",
+    "pcp": "PCP",
+    "масло thc": "MacLo THC",
+    "каннибиноиды": "KaHHa6uHouDu",
+    "опиоиды": "OnoUoDu",
+    "психоделики": "NcuXoDeLuKu",
+    "диссоциативы": "DuccoUaTuBu",
+    "соль": "CoLb",
+    "наркотик": "HaPk0TuK",
+    "наркота": "HaPk0Ta",
+}
+
+def censor_drugs(text: str) -> str:
+    """Цензурирует ТОЛЬКО названия наркотиков в leet-стиле"""
+    result = text
+    for word, leet in DRUG_LEET.items():
+        pattern = re.compile(re.escape(word), re.IGNORECASE)
+        result = pattern.sub(leet, result)
+    return result
+
+# ============================================
+# ТОВАРЫ
+# ============================================
 
 PRODUCTS = {
-    # ===== СОЛИ =====
-    "меф": {"name": "Мeфeдрoн", "price": 15, "category": "соль", "emoji": "💎"},
+    "меф": {"name": "Мефедрон", "price": 15, "category": "соль", "emoji": "💎"},
     "a-pvp": {"name": "a-PvP", "price": 9, "category": "соль", "emoji": "⚗️"},
     "мдвп": {"name": "МДВП", "price": 13, "category": "соль", "emoji": "🧪"},
-    "скорость": {"name": "Скoрoсть", "price": 7, "category": "соль", "emoji": "⚡"},
+    "скорость": {"name": "Скорость", "price": 7, "category": "соль", "emoji": "⚡"},
     "кристаллы": {"name": "Кристаллы", "price": 20, "category": "соль", "emoji": "💠"},
     "экстази": {"name": "Экстази", "price": 18, "category": "соль", "emoji": "🎯"},
-    
-    # ===== КАННАБИС =====
-    "гашиш": {"name": "ГашNш", "price": 12, "category": "каннибиноиды", "emoji": "🌿"},
-    "марихуанна": {"name": "Мaрихуaннa", "price": 8, "category": "каннибиноиды", "emoji": "🍃"},
+    "гашиш": {"name": "Гашиш", "price": 12, "category": "каннибиноиды", "emoji": "🌿"},
+    "марихуанна": {"name": "Марихуанна", "price": 8, "category": "каннибиноиды", "emoji": "🍃"},
     "шишки": {"name": "Шишки", "price": 14, "category": "каннибиноиды", "emoji": "🌲"},
-    "масло": {"name": "Маслo THC", "price": 25, "category": "каннибиноиды", "emoji": "💧"},
+    "масло": {"name": "Масло THC", "price": 25, "category": "каннибиноиды", "emoji": "💧"},
     "спайс": {"name": "Спайс", "price": 10, "category": "каннибиноиды", "emoji": "🔥"},
-    
-    # ===== ОПИОИДЫ =====
-    "героин": {"name": "Гeрoин", "price": 30, "category": "опиоиды", "emoji": "☠️"},
-    "метадон": {"name": "Мeтaдoн", "price": 22, "category": "опиоиды", "emoji": "💊"},
-    "трамадол": {"name": "Трaмaдoл", "price": 11, "category": "опиоиды", "emoji": "💉"},
-    "фентанил": {"name": "Фeнтaнил", "price": 40, "category": "опиоиды", "emoji": "⚰️"},
-    "кодеин": {"name": "Кoдeин", "price": 9, "category": "опиоиды", "emoji": "🍬"},
-    "морфин": {"name": "Мoрфин", "price": 27, "category": "опиоиды", "emoji": "🏥"},
-    
-    # ===== ПСИХЕДЕЛИКИ =====
+    "героин": {"name": "Героин", "price": 30, "category": "опиоиды", "emoji": "☠️"},
+    "метадон": {"name": "Метадон", "price": 22, "category": "опиоиды", "emoji": "💊"},
+    "трамадол": {"name": "Трамадол", "price": 11, "category": "опиоиды", "emoji": "💉"},
+    "фентанил": {"name": "Фентанил", "price": 40, "category": "опиоиды", "emoji": "⚰️"},
+    "кодеин": {"name": "Кодеин", "price": 9, "category": "опиоиды", "emoji": "🍬"},
+    "морфин": {"name": "Морфин", "price": 27, "category": "опиоиды", "emoji": "🏥"},
     "лсд": {"name": "ЛСД", "price": 16, "category": "психоделики", "emoji": "🌈"},
     "грибы": {"name": "Грибы", "price": 12, "category": "психоделики", "emoji": "🍄"},
     "dmt": {"name": "DMT", "price": 35, "category": "психоделики", "emoji": "👁️"},
-    "мескалин": {"name": "Мeскaлин", "price": 28, "category": "психоделики", "emoji": "🌵"},
+    "мескалин": {"name": "Мескалин", "price": 28, "category": "психоделики", "emoji": "🌵"},
     "2cb": {"name": "2C-B", "price": 20, "category": "психоделики", "emoji": "🎨"},
-    
-    # ===== ДИССОЦИАТИВЫ =====
-    "кетамин": {"name": "Кeтaмин", "price": 17, "category": "диссоциативы", "emoji": "🐴"},
+    "кетамин": {"name": "Кетамин", "price": 17, "category": "диссоциативы", "emoji": "🐴"},
     "pcp": {"name": "PCP", "price": 19, "category": "диссоциативы", "emoji": "🧊"},
 }
 
@@ -99,48 +133,12 @@ current_admin_chat: Optional[int] = None
 current_admin_user: Optional[int] = None
 
 # ============================================
-# РЕФЕРАЛЬНАЯ СИСТЕМА
-# ============================================
-
-def generate_referral_link(user_id: int) -> str:
-    ref_code = hashlib.md5(str(user_id).encode()).hexdigest()[:8]
-    return f"https://t.me/{BOT_USERNAME}?start=ref_{ref_code}"
-
-def get_user_id_from_ref_code(ref_code: str) -> Optional[int]:
-    for uid, data in referral_data.items():
-        if data.get("ref_code") == ref_code:
-            return uid
-    return None
-
-# ============================================
-# АВТОМАТИЧЕСКАЯ РЕГИСТРАЦИЯ
-# ============================================
-
-def auto_register(user_id: int):
-    if user_id not in user_data:
-        user_data[user_id] = {
-            "purchases_today": 0,
-            "cooldown_until": None,
-            "balance": 0.0,
-            "total_purchases": 0,
-            "ticket": None,
-            "in_chat": False,
-            "ref_code": hashlib.md5(str(user_id).encode()).hexdigest()[:8],
-            "invited_users": 0
-        }
-        referral_data[user_id] = {
-            "ref_code": user_data[user_id]["ref_code"],
-            "ref_link": generate_referral_link(user_id),
-            "invited_users": 0
-        }
-
-# ============================================
 # КЛАВИАТУРЫ
 # ============================================
 
 def get_main_keyboard():
     keyboard = InlineKeyboardMarkup(row_width=1)
-    keyboard.add(InlineKeyboardButton(text="💠 Купить нарк0тy 💠", callback_data="buy"))
+    keyboard.add(InlineKeyboardButton(text="💠 Купить 💠", callback_data="buy"))
     keyboard.add(InlineKeyboardButton(text="👤 Профиль", callback_data="profile"))
     keyboard.add(InlineKeyboardButton(text="🔗 Реферальная ссылка", callback_data="referral"))
     keyboard.add(InlineKeyboardButton(text="🌐 Наш сайт", callback_data="site"))
@@ -150,7 +148,7 @@ def get_categories_keyboard():
     keyboard = InlineKeyboardMarkup(row_width=1)
     keyboard.add(
         InlineKeyboardButton(text="🧂 Соль", callback_data="category_salt"),
-        InlineKeyboardButton(text="🌿 Каннибиноиды", callback_data="category_cannabis"),
+        InlineKeyboardButton(text="🌿 Каннабиноиды", callback_data="category_cannabis"),
         InlineKeyboardButton(text="☠️ Опиоиды", callback_data="category_opioids"),
         InlineKeyboardButton(text="🌈 Психоделики", callback_data="category_psychedelics"),
         InlineKeyboardButton(text="🐴 Диссоциативы", callback_data="category_dissociatives"),
@@ -162,8 +160,10 @@ def get_products_keyboard(category: str):
     keyboard = InlineKeyboardMarkup(row_width=1)
     for key, product in PRODUCTS.items():
         if product["category"] == category:
+            # ТОЛЬКО НАЗВАНИЕ НАРКОТИКА В LEET
+            leet_name = censor_drugs(product['name'])
             keyboard.add(InlineKeyboardButton(
-                text=f"{product['emoji']} {product['name']} - {product['price']} GRAM",
+                text=f"{product['emoji']} {leet_name} - {product['price']} GRAM",
                 callback_data=f"product_{key}"
             ))
     keyboard.add(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_categories"))
@@ -190,9 +190,33 @@ def get_back_keyboard():
     keyboard.add(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main"))
     return keyboard
 
-# ============================================
-# УДАЛЕНИЕ ЧАТА
-# ============================================
+def generate_referral_link(user_id: int) -> str:
+    ref_code = hashlib.md5(str(user_id).encode()).hexdigest()[:8]
+    return f"https://t.me/{BOT_USERNAME}?start=ref_{ref_code}"
+
+def get_user_id_from_ref_code(ref_code: str) -> Optional[int]:
+    for uid, data in referral_data.items():
+        if data.get("ref_code") == ref_code:
+            return uid
+    return None
+
+def auto_register(user_id: int):
+    if user_id not in user_data:
+        user_data[user_id] = {
+            "purchases_today": 0,
+            "cooldown_until": None,
+            "balance": 0.0,
+            "total_purchases": 0,
+            "ticket": None,
+            "in_chat": False,
+            "ref_code": hashlib.md5(str(user_id).encode()).hexdigest()[:8],
+            "invited_users": 0
+        }
+        referral_data[user_id] = {
+            "ref_code": user_data[user_id]["ref_code"],
+            "ref_link": generate_referral_link(user_id),
+            "invited_users": 0
+        }
 
 async def delete_chat_messages(user_id: int):
     try:
@@ -253,12 +277,12 @@ async def cmd_start(message: Message, state: FSMContext):
         return
     
     welcome_text = (
-        "Пр*в*т, эт* б*т для п*к*п*к* н*рк*т*к*в!\n"
-        "Зд*сь *сть *сс*ртим*нт п* т*п* с*л*й, к*нн*б*н**д*в, *п***д*в, псих*д*л*к*в и д*сс*ц**т*в*в.\n"
-        "П*сл* в*б*р* т*в*р* с*зд*ется т*к*т, и вы *бщ*ет*сь с пр*д*вц*м н*пр*мую.\n"
-        "*пл*т* пр*изв*д*тся в кр*пт*в*лют* GRAM.\n"
-        "Вс*х бл*г и х*р*ш*х п*к*п*к.\n\n"
-        f"🌐 Так же у нас есть еще сайт для покупок! Чтобы не заходить в телеграм)\n"
+        "Привет! Это бот для покупок.\n"
+        "Здесь есть ассортимент продуктов по разным категориям.\n"
+        "После выбора товара создается тикет, и вы общаетесь с продавцом напрямую.\n"
+        "Оплата производится в криптовалюте GRAM.\n"
+        "Всех благ и хороших покупок.\n\n"
+        f"🌐 Так же у нас есть сайт для покупок! Чтобы не заходить в телеграм)\n"
         f"{SITE_URL}"
     )
     await message.answer(welcome_text, reply_markup=get_main_keyboard())
@@ -335,12 +359,12 @@ async def handle_back_to_main(callback: CallbackQuery, state: FSMContext):
         return
     
     welcome_text = (
-        "Пр*в*т, эт* б*т для п*к*п*к* н*рк*т*к*в!\n"
-        "Зд*сь *сть *сс*ртим*нт п* т*п* с*л*й, к*нн*б*н**д*в, *п***д*в, псих*д*л*к*в и д*сс*ц**т*в*в.\n"
-        "П*сл* в*б*р* т*в*р* с*зд*ется т*к*т, и вы *бщ*ет*сь с пр*д*вц*м н*пр*мую.\n"
-        "*пл*т* пр*изв*д*тся в кр*пт*в*лют* GRAM.\n"
-        "Вс*х бл*г и х*р*ш*х п*к*п*к.\n\n"
-        f"🌐 Так же у нас есть еще сайт для покупок! Чтобы не заходить в телеграм)\n"
+        "Привет! Это бот для покупок.\n"
+        "Здесь есть ассортимент продуктов по разным категориям.\n"
+        "После выбора товара создается тикет, и вы общаетесь с продавцом напрямую.\n"
+        "Оплата производится в криптовалюте GRAM.\n"
+        "Всех благ и хороших покупок.\n\n"
+        f"🌐 Так же у нас есть сайт для покупок! Чтобы не заходить в телеграм)\n"
         f"{SITE_URL}"
     )
     await callback.message.edit_text(welcome_text, reply_markup=get_main_keyboard())
@@ -364,14 +388,17 @@ async def handle_category(callback: CallbackQuery, state: FSMContext):
     }
     category_name = category_map.get(category, "")
     
+    # Цензурируем ТОЛЬКО название категории (если это наркотик)
+    censored_category = censor_drugs(category_name)
+    
     await callback.message.edit_text(
-        f"Выберите продукт из категории '{category_name}':",
+        f"Выберите продукт из категории '{censored_category}':",
         reply_markup=get_products_keyboard(category_name)
     )
     await callback.answer()
 
 # ============================================
-# ПОКУПКА (СОЗДАНИЕ ТИКЕТА)
+# ПОКУПКА
 # ============================================
 
 @dp.callback_query_handler(lambda c: c.data.startswith("product_"))
@@ -414,8 +441,11 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
     
     await state.finish()
     
+    # ТОЛЬКО НАЗВАНИЕ НАРКОТИКА В LEET
+    leet_name = censor_drugs(product['name'])
+    
     await callback.message.edit_text(
-        f"✅ Вы выбрали {product['emoji']} {product['name']}!\n"
+        f"✅ Вы выбрали {product['emoji']} {leet_name}!\n"
         f"━━━━━━━━━━━━━━━━\n"
         f"🎫 Ваш тикет создан! #{ticket_number}\n"
         f"💰 Стоимость: {product['price']} GRAM\n"
@@ -553,18 +583,14 @@ async def handle_close_ticket(callback: CallbackQuery):
         await bot.send_message(ADMIN_ID, f"📋 Ожидают принятия:\n{waiting_list}")
 
 # ============================================
-# ОБРАБОТКА ТИКЕТОВ ИЗ САЙТА
+# ТИКЕТЫ С САЙТА
 # ============================================
 
 @dp.message_handler(lambda message: "Я оплатил товар" in message.text.lower())
 async def handle_ticket_from_site(message: Message):
-    """
-    Обработка сообщения: "Я оплатил товар (номер тикета)"
-    """
     user_id = message.from_user.id
     text = message.text.lower()
     
-    # Ищем номер тикета
     ticket_match = re.search(r'\d+', text)
     
     if not ticket_match:
@@ -576,7 +602,6 @@ async def handle_ticket_from_site(message: Message):
     
     ticket_number = int(ticket_match.group())
     
-    # Проверяем тикет через API
     try:
         response = requests.post(
             f"{API_URL}/verify_ticket",
@@ -588,14 +613,12 @@ async def handle_ticket_from_site(message: Message):
             data = response.json()
             
             if data.get('success'):
-                # Тикет подтверждён — создаём заказ в боте
                 auto_register(user_id)
                 
                 if not check_purchase_limit(user_id):
                     await message.answer("❌ Достигнут лимит покупок на сегодня!")
                     return
                 
-                # Создаём тикет в боте
                 bot_ticket = random.randint(1, 150000)
                 
                 user_data[user_id]["purchases_today"] += 1
@@ -608,9 +631,10 @@ async def handle_ticket_from_site(message: Message):
                 else:
                     user_data[user_id]["cooldown_until"] = datetime.now() + timedelta(hours=5)
                 
+                product_name = data.get('product_name', 'Товар')
                 active_tickets[bot_ticket] = {
                     "user_id": user_id,
-                    "product": data.get('product_name', 'Товар'),
+                    "product": product_name,
                     "price": data.get('amount', 0),
                     "created_at": datetime.now(),
                     "paid": True,
@@ -618,17 +642,19 @@ async def handle_ticket_from_site(message: Message):
                     "site_ticket": ticket_number
                 }
                 
-                # Помечаем тикет как использованный
                 requests.post(
                     f"{API_URL}/use_ticket",
                     json={'ticket_number': ticket_number}
                 )
                 
+                # ТОЛЬКО НАЗВАНИЕ НАРКОТИКА В LEET
+                leet_name = censor_drugs(product_name)
+                
                 await message.answer(
                     f"✅ ТИКЕТ ПОДТВЕРЖДЁН!\n"
                     f"━━━━━━━━━━━━━━━━\n"
                     f"🎫 Ваш тикет в боте: #{bot_ticket}\n"
-                    f"📦 Товар: {data.get('product_name', 'Товар')}\n"
+                    f"📦 Товар: {leet_name}\n"
                     f"💰 Сумма: {data.get('amount', 0)} GRAM\n"
                     f"━━━━━━━━━━━━━━━━\n"
                     f"⏳ Ожидайте, продавец свяжется с вами!"
@@ -640,7 +666,7 @@ async def handle_ticket_from_site(message: Message):
                     f"🎫 Тикет бота: #{bot_ticket}\n"
                     f"🎫 Тикет сайта: #{ticket_number}\n"
                     f"👤 Пользователь: {user_id}\n"
-                    f"📦 Товар: {data.get('product_name', 'Товар')}\n"
+                    f"📦 Товар: {product_name}\n"
                     f"💰 Сумма: {data.get('amount', 0)} GRAM\n"
                     f"━━━━━━━━━━━━━━━━\n"
                     f"✅ Ожидает принятия!"
@@ -674,7 +700,6 @@ async def handle_all_text_messages(message: Message, state: FSMContext):
     user_id = message.from_user.id
     text = message.text
     
-    # Проверка на тикет из сайта (уже обработано выше)
     if "Я оплатил товар" in text.lower():
         return
     
@@ -704,7 +729,7 @@ async def handle_all_text_messages(message: Message, state: FSMContext):
             await message.answer("❌ Ошибка отправки")
         return
     
-    await message.answer("❌ Чтобы общаться с продавцом, сначала сделайте покупку через кнопку '💠 Купить нарк0тy' или через сайт.")
+    await message.answer("❌ Чтобы общаться с продавцом, сначала сделайте покупку через кнопку '💠 Купить' или через сайт.")
 
 # ============================================
 # ВСПОМОГАТЕЛЬНЫЕ
