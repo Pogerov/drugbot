@@ -1,10 +1,6 @@
-import asyncio
 import logging
 import random
-import os
-import threading
 import hashlib
-import sys
 import re
 import requests
 from datetime import datetime, timedelta
@@ -17,7 +13,6 @@ from aiogram.dispatcher.filters import Command
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
 from aiogram.utils import executor
-from flask import Flask
 
 # ============================================
 # КОНФИГУРАЦИЯ
@@ -29,14 +24,14 @@ CRYPTO_WALLET = "UQDRRRGutl_ccP25XcwbOK-RN2UXuvE1_GFoerlaIDvmwO7I"
 BOT_USERNAME = "dfsddfagas_bot"
 
 # ============================================
-# АДРЕС ТВОЕГО API И САЙТА НА RENDER
+# АДРЕС ТВОЕГО API НА RENDER
 # ============================================
 
 API_URL = "https://drug-market.onrender.com/api"  # ← ЗАМЕНИ НА СВОЮ ССЫЛКУ
 SITE_URL = "https://drug-market.onrender.com"     # ← ЗАМЕНИ НА СВОЮ ССЫЛКУ
 
 # ============================================
-# НАСТРОЙКА
+# НАСТРОЙКА ЛОГИРОВАНИЯ
 # ============================================
 
 logging.basicConfig(
@@ -44,27 +39,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-# ============================================
-# FLASK (ДЛЯ RENDER)
-# ============================================
-
-app = Flask(__name__)
-
-@app.route('/')
-def health_check():
-    return "Бот работает!", 200
-
-@app.route('/health')
-def health():
-    return "OK", 200
-
-def run_flask():
-    app.run(host='0.0.0.0', port=10000)
-
-thread = threading.Thread(target=run_flask, daemon=True)
-thread.start()
-logger.info("🌐 Веб-сервер запущен на порту 10000")
 
 # ============================================
 # БОТ
