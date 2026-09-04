@@ -20,15 +20,29 @@ from aiogram.utils import executor
 
 BOT_TOKEN = "8997465806:AAEPCdj2o2GmeRlnBzUJTG2qYDTwxt0ARXk"
 ADMIN_ID = 7753887058
-CRYPTO_WALLET = "UQDRRRGutl_ccP25XcwbOK-RN2UXuvE1_GFoerlaIDvmwO7I"
 BOT_USERNAME = "dfsddfagas_bot"
 
 # ============================================
-# АДРЕС ТВОЕГО API НА RENDER
+# ТВОИ КОШЕЛЬКИ
 # ============================================
 
-API_URL = "https://drug-market.onrender.com/api"  # ← ЗАМЕНИ НА СВОЮ ССЫЛКУ
-SITE_URL = "https://drug-market.onrender.com"     # ← ЗАМЕНИ НА СВОЮ ССЫЛКУ
+CRYPTO_WALLETS = {
+    "GRAM": {
+        "address": "UQDRRRGutl_ccP25XcwbOK-RN2UXuvE1_GFoerlaIDvmwO7I",
+        "emoji": "💎",
+        "network": "TON"
+    },
+    "USDT": {
+        "address": "TNdRJZQSTss4JnnP8LoaRQrcA7SbmGTijk",
+        "emoji": "🪙",
+        "network": "TRC20 (Tether)"
+    },
+    "BTC": {
+        "address": "bc1qc6nuwczmtgxeql72wzsxsyctmhp3h4430emy9z",
+        "emoji": "₿",
+        "network": "Bitcoin"
+    }
+}
 
 # ============================================
 # НАСТРОЙКА ЛОГИРОВАНИЯ
@@ -49,7 +63,7 @@ dp = Dispatcher(bot)
 dp.middleware.setup(LoggingMiddleware())
 
 # ============================================
-# LEET-ЦЕНЗУРА ТОЛЬКО ДЛЯ НАРКОТИКОВ
+# LEET-ЦЕНЗУРА
 # ============================================
 
 DRUG_LEET = {
@@ -87,7 +101,6 @@ DRUG_LEET = {
 }
 
 def censor_drugs(text: str) -> str:
-    """Цензурирует ТОЛЬКО названия наркотиков в leet-стиле"""
     result = text
     for word, leet in DRUG_LEET.items():
         pattern = re.compile(re.escape(word), re.IGNORECASE)
@@ -136,7 +149,7 @@ current_admin_chat: Optional[int] = None
 current_admin_user: Optional[int] = None
 
 # ============================================
-# КЛАВИАТУРЫ (БЕЗ КНОПКИ "НАШ САЙТ")
+# КЛАВИАТУРЫ
 # ============================================
 
 def get_main_keyboard():
@@ -167,6 +180,16 @@ def get_products_keyboard(category: str):
                 text=f"{product['emoji']} {leet_name} - {product['price']} GRAM",
                 callback_data=f"product_{key}"
             ))
+    keyboard.add(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_categories"))
+    return keyboard
+
+def get_currency_keyboard(product_key: str):
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    for currency, data in CRYPTO_WALLETS.items():
+        keyboard.add(InlineKeyboardButton(
+            text=f"{data['emoji']} {currency} ({data['network']})",
+            callback_data=f"pay_{product_key}_{currency}"
+        ))
     keyboard.add(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_categories"))
     return keyboard
 
@@ -285,10 +308,8 @@ async def cmd_start(message: Message, state: FSMContext):
         "Привет, это бот для покупок.\n"
         "Здесь есть ассортимент товаров по разным категориям.\n"
         "После выбора товара создается тикет, и вы общаетесь с продавцом напрямую.\n"
-        "Оплата производится в криптовалюте GRAM.\n"
-        "Всех благ и хороших покупок.\n\n"
-        f"🌐 Так же у нас есть сайт для покупок! Чтобы не заходить в телеграм)\n"
-        f"{SITE_URL}"
+        "Оплата доступна в GRAM, USDT (TRC20) и BTC.\n"
+        "Всех благ и хороших покупок."
     )
     await message.answer(welcome_text, reply_markup=get_main_keyboard())
     await state.finish()
@@ -358,10 +379,8 @@ async def handle_back_to_main(callback: CallbackQuery, state: FSMContext):
         "Привет, это бот для покупок.\n"
         "Здесь есть ассортимент товаров по разным категориям.\n"
         "После выбора товара создается тикет, и вы общаетесь с продавцом напрямую.\n"
-        "Оплата производится в криптовалюте GRAM.\n"
-        "Всех благ и хороших покупок.\n\n"
-        f"🌐 Так же у нас есть сайт для покупок! Чтобы не заходить в телеграм)\n"
-        f"{SITE_URL}"
+        "Оплата доступна в GRAM, USDT (TRC20) и BTC.\n"
+        "Всех благ и хороших покупок."
     )
     await callback.message.edit_text(welcome_text, reply_markup=get_main_keyboard())
     await state.finish()
@@ -393,14 +412,12 @@ async def handle_category(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 # ============================================
-# ПОКУПКА
+# ВЫБОР ТОВАРА → ВАЛЮТА
 # ============================================
 
 @dp.callback_query_handler(lambda c: c.data.startswith("product_"))
 async def handle_product(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
-    auto_register(user_id)
-    
     product_key = callback.data.split("_")[1]
     product = PRODUCTS.get(product_key)
     
@@ -408,10 +425,46 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Товар не найден!", show_alert=True)
         return
     
+    if not check_cooldown(user_id):
+        await callback.answer("⚠️ У вас активен кулдаун!", show_alert=True)
+        return
+    
+    leet_name = censor_drugs(product['name'])
+    
+    await callback.message.edit_text(
+        f"Вы выбрали: {product['emoji']} {leet_name}\n"
+        f"💰 Цена: {product['price']} GRAM\n\n"
+        f"Выберите способ оплаты:",
+        reply_markup=get_currency_keyboard(product_key)
+    )
+    await callback.answer()
+
+# ============================================
+# ВЫБОР ВАЛЮТЫ → СОЗДАНИЕ ТИКЕТА
+# ============================================
+
+@dp.callback_query_handler(lambda c: c.data.startswith("pay_"))
+async def handle_payment_method(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    data = callback.data.split("_")
+    product_key = data[1]
+    currency = data[2]
+    
+    product = PRODUCTS.get(product_key)
+    if not product:
+        await callback.answer("Товар не найден!", show_alert=True)
+        return
+    
+    wallet = CRYPTO_WALLETS.get(currency)
+    if not wallet:
+        await callback.answer("Способ оплаты не найден!", show_alert=True)
+        return
+    
     if not check_purchase_limit(user_id):
         await callback.answer("❌ Достигнут лимит покупок на сегодня!", show_alert=True)
         return
     
+    # Создаём тикет
     ticket_number = random.randint(1, 150000)
     
     if user_id not in user_data:
@@ -431,6 +484,7 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
         "user_id": user_id,
         "product": product["name"],
         "price": product["price"],
+        "currency": currency,
         "created_at": datetime.now()
     }
     
@@ -443,9 +497,10 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
         f"━━━━━━━━━━━━━━━━\n"
         f"🎫 Ваш тикет создан! #{ticket_number}\n"
         f"💰 Стоимость: {product['price']} GRAM\n"
-        f"📤 Оплата на кошелек: `{CRYPTO_WALLET}`\n"
+        f"💳 Валюта: {currency} ({wallet['network']})\n"
+        f"📤 Кошелёк: `{wallet['address']}`\n"
         f"━━━━━━━━━━━━━━━━\n"
-        f"⏳ Ожидайте, продавец свяжется с вами в этом чате!",
+        f"⏳ Переведите точную сумму и ожидайте, продавец свяжется с вами!",
         parse_mode="Markdown"
     )
     
@@ -456,6 +511,7 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
         f"👤 Пользователь: {user_id}\n"
         f"📦 Товар: {product['name']}\n"
         f"💰 Сумма: {product['price']} GRAM\n"
+        f"💳 Валюта: {currency}\n"
         f"━━━━━━━━━━━━━━━━\n"
         f"Ожидает принятия!"
     )
@@ -507,6 +563,7 @@ async def handle_accept_ticket(callback: CallbackQuery):
         f"👤 Пользователь: {user_id}\n"
         f"📦 Товар: {ticket['product']}\n"
         f"💰 Сумма: {ticket['price']} GRAM\n"
+        f"💳 Валюта: {ticket.get('currency', 'GRAM')}\n"
         f"━━━━━━━━━━━━━━━━\n"
         f"💬 Теперь вы общаетесь с клиентом.",
         reply_markup=get_admin_chat_keyboard(ticket_number)
@@ -577,112 +634,6 @@ async def handle_close_ticket(callback: CallbackQuery):
         await bot.send_message(ADMIN_ID, f"📋 Ожидают принятия:\n{waiting_list}")
 
 # ============================================
-# ТИКЕТЫ С САЙТА
-# ============================================
-
-@dp.message_handler(lambda message: "Я оплатил товар" in message.text.lower())
-async def handle_ticket_from_site(message: Message):
-    user_id = message.from_user.id
-    text = message.text.lower()
-    
-    ticket_match = re.search(r'\d+', text)
-    
-    if not ticket_match:
-        await message.answer(
-            "❌ Неверный формат!\n"
-            "Напишите: `Я оплатил товар 123456`"
-        )
-        return
-    
-    ticket_number = int(ticket_match.group())
-    
-    try:
-        response = requests.post(
-            f"{API_URL}/verify_ticket",
-            json={'ticket_number': ticket_number},
-            timeout=5
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            
-            if data.get('success'):
-                auto_register(user_id)
-                
-                if not check_purchase_limit(user_id):
-                    await message.answer("❌ Достигнут лимит покупок на сегодня!")
-                    return
-                
-                bot_ticket = random.randint(1, 150000)
-                
-                user_data[user_id]["purchases_today"] += 1
-                user_data[user_id]["total_purchases"] += 1
-                user_data[user_id]["ticket"] = bot_ticket
-                user_data[user_id]["in_chat"] = True
-                
-                if user_data[user_id]["purchases_today"] >= 2:
-                    user_data[user_id]["cooldown_until"] = datetime.now() + timedelta(hours=24)
-                else:
-                    user_data[user_id]["cooldown_until"] = datetime.now() + timedelta(hours=5)
-                
-                product_name = data.get('product_name', 'Товар')
-                active_tickets[bot_ticket] = {
-                    "user_id": user_id,
-                    "product": product_name,
-                    "price": data.get('amount', 0),
-                    "created_at": datetime.now(),
-                    "paid": True,
-                    "from_site": True,
-                    "site_ticket": ticket_number
-                }
-                
-                requests.post(
-                    f"{API_URL}/use_ticket",
-                    json={'ticket_number': ticket_number}
-                )
-                
-                leet_name = censor_drugs(product_name)
-                
-                await message.answer(
-                    f"✅ ТИКЕТ ПОДТВЕРЖДЁН!\n"
-                    f"━━━━━━━━━━━━━━━━\n"
-                    f"🎫 Ваш тикет в боте: #{bot_ticket}\n"
-                    f"📦 Товар: {leet_name}\n"
-                    f"💰 Сумма: {data.get('amount', 0)} GRAM\n"
-                    f"━━━━━━━━━━━━━━━━\n"
-                    f"⏳ Ожидайте, продавец свяжется с вами!"
-                )
-                
-                admin_message = (
-                    f"🔔 ПОКУПКА С САЙТА!\n"
-                    f"━━━━━━━━━━━━━━━━\n"
-                    f"🎫 Тикет бота: #{bot_ticket}\n"
-                    f"🎫 Тикет сайта: #{ticket_number}\n"
-                    f"👤 Пользователь: {user_id}\n"
-                    f"📦 Товар: {product_name}\n"
-                    f"💰 Сумма: {data.get('amount', 0)} GRAM\n"
-                    f"━━━━━━━━━━━━━━━━\n"
-                    f"✅ Ожидает принятия!"
-                )
-                
-                await bot.send_message(
-                    ADMIN_ID,
-                    admin_message,
-                    reply_markup=get_admin_ticket_keyboard(bot_ticket)
-                )
-                
-            else:
-                await message.answer(
-                    "❌ Тикет не найден или уже использован.\n"
-                    "Проверьте номер тикета и попробуйте снова."
-                )
-        else:
-            await message.answer("❌ Ошибка проверки тикета. Попробуйте позже.")
-            
-    except Exception as e:
-        await message.answer(f"❌ Ошибка: {str(e)}")
-
-# ============================================
 # ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ
 # ============================================
 
@@ -692,9 +643,6 @@ async def handle_all_text_messages(message: Message, state: FSMContext):
     
     user_id = message.from_user.id
     text = message.text
-    
-    if "Я оплатил товар" in text.lower():
-        return
     
     if user_id == ADMIN_ID:
         if current_admin_chat is not None and current_admin_chat in active_tickets:
@@ -722,7 +670,7 @@ async def handle_all_text_messages(message: Message, state: FSMContext):
             await message.answer("❌ Ошибка отправки")
         return
     
-    await message.answer("❌ Чтобы общаться с продавцом, сначала сделайте покупку через кнопку '💠 Купить' или через сайт.")
+    await message.answer("❌ Чтобы общаться с продавцом, сначала сделайте покупку через кнопку '💠 Купить'.")
 
 # ============================================
 # ВСПОМОГАТЕЛЬНЫЕ
@@ -758,8 +706,6 @@ async def on_startup(dp):
     logger.info("🚀 Бот запущен!")
     logger.info(f"👤 Админ: {ADMIN_ID}")
     logger.info(f"🤖 Бот: @{BOT_USERNAME}")
-    logger.info(f"🌐 API URL: {API_URL}")
-    logger.info(f"🌐 SITE URL: {SITE_URL}")
     logger.info("✅ Бот готов!")
 
 if __name__ == "__main__":
