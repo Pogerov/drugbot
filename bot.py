@@ -2,7 +2,7 @@ import logging
 import random
 import hashlib
 import re
-import requests
+import sqlite3
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 
@@ -23,7 +23,17 @@ ADMIN_ID = 7753887058
 BOT_USERNAME = "dfsddfagas_bot"
 
 # ============================================
-# ТВОИ КОШЕЛЬКИ
+# КУРСЫ ВАЛЮТ (1 GRAM = X)
+# ============================================
+
+EXCHANGE_RATES = {
+    "GRAM": 1.0,
+    "USDT": 1.0,
+    "BTC": 0.00000012,
+}
+
+# ============================================
+# КОШЕЛЬКИ
 # ============================================
 
 CRYPTO_WALLETS = {
@@ -43,6 +53,56 @@ CRYPTO_WALLETS = {
         "network": "Bitcoin"
     }
 }
+
+# ============================================
+# БАЗА ДАННЫХ ДЛЯ АКТИВНЫХ ЧАТОВ
+# ============================================
+
+def init_chat_db():
+    conn = sqlite3.connect('active_chats.db')
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS active_chats (
+            admin_id INTEGER PRIMARY KEY,
+            ticket_number INTEGER,
+            user_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def save_active_chat(admin_id: int, ticket_number: int, user_id: int):
+    conn = sqlite3.connect('active_chats.db')
+    c = conn.cursor()
+    c.execute('''
+        INSERT OR REPLACE INTO active_chats (admin_id, ticket_number, user_id)
+        VALUES (?, ?, ?)
+    ''', (admin_id, ticket_number, user_id))
+    conn.commit()
+    conn.close()
+
+def get_active_chat(admin_id: int):
+    conn = sqlite3.connect('active_chats.db')
+    c = conn.cursor()
+    c.execute('''
+        SELECT ticket_number, user_id FROM active_chats WHERE admin_id = ?
+    ''', (admin_id,))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        return {'ticket_number': row[0], 'user_id': row[1]}
+    return None
+
+def clear_active_chat(admin_id: int):
+    conn = sqlite3.connect('active_chats.db')
+    c = conn.cursor()
+    c.execute('DELETE FROM active_chats WHERE admin_id = ?', (admin_id,))
+    conn.commit()
+    conn.close()
+
+# Инициализация БД
+init_chat_db()
 
 # ============================================
 # НАСТРОЙКА ЛОГИРОВАНИЯ
@@ -145,8 +205,29 @@ user_data: Dict[int, Dict] = {}
 active_tickets: Dict[int, Dict] = {}
 referral_data: Dict[int, Dict] = {}
 
-current_admin_chat: Optional[int] = None
-current_admin_user: Optional[int] = None
+# ============================================
+# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# ============================================
+
+def get_user_currency(user_id: int) -> str:
+    if user_id not in user_data:
+        return "GRAM"
+    return user_data[user_id].get("currency", "GRAM")
+
+def set_user_currency(user_id: int, currency: str):
+    if user_id not in user_data:
+        auto_register(user_id)
+    user_data[user_id]["currency"] = currency
+
+def convert_price(price_in_gram: float, currency: str) -> float:
+    rate = EXCHANGE_RATES.get(currency, 1.0)
+    return round(price_in_gram * rate, 8)
+
+def format_price(price: float, currency: str) -> str:
+    if currency == "BTC":
+        return f"{price:.8f}"
+    else:
+        return f"{price:.2f}"
 
 # ============================================
 # КЛАВИАТУРЫ
@@ -157,39 +238,45 @@ def get_main_keyboard():
     keyboard.add(InlineKeyboardButton(text="💠 Купить 💠", callback_data="buy"))
     keyboard.add(InlineKeyboardButton(text="👤 Профиль", callback_data="profile"))
     keyboard.add(InlineKeyboardButton(text="🔗 Реферальная ссылка", callback_data="referral"))
+    keyboard.add(InlineKeyboardButton(text="💱 Выбрать валюту", callback_data="change_currency"))
     return keyboard
 
-def get_categories_keyboard():
+def get_currency_keyboard():
     keyboard = InlineKeyboardMarkup(row_width=1)
     keyboard.add(
-        InlineKeyboardButton(text="🧂 Соль", callback_data="category_salt"),
-        InlineKeyboardButton(text="🌿 Каннабиноиды", callback_data="category_cannabis"),
-        InlineKeyboardButton(text="☠️ Опиоиды", callback_data="category_opioids"),
-        InlineKeyboardButton(text="🌈 Психоделики", callback_data="category_psychedelics"),
-        InlineKeyboardButton(text="🐴 Диссоциативы", callback_data="category_dissociatives"),
+        InlineKeyboardButton(text="💎 GRAM (TON)", callback_data="set_currency_GRAM"),
+        InlineKeyboardButton(text="🪙 USDT (TRC20)", callback_data="set_currency_USDT"),
+        InlineKeyboardButton(text="₿ BTC (Bitcoin)", callback_data="set_currency_BTC"),
+    )
+    keyboard.add(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main"))
+    return keyboard
+
+def get_categories_keyboard(user_id: int):
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    currency = get_user_currency(user_id)
+    keyboard.add(
+        InlineKeyboardButton(text=f"🧂 Соль ({currency})", callback_data="category_salt"),
+        InlineKeyboardButton(text=f"🌿 Каннабиноиды ({currency})", callback_data="category_cannabis"),
+        InlineKeyboardButton(text=f"☠️ Опиоиды ({currency})", callback_data="category_opioids"),
+        InlineKeyboardButton(text=f"🌈 Психоделики ({currency})", callback_data="category_psychedelics"),
+        InlineKeyboardButton(text=f"🐴 Диссоциативы ({currency})", callback_data="category_dissociatives"),
         InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main")
     )
     return keyboard
 
-def get_products_keyboard(category: str):
+def get_products_keyboard(category: str, user_id: int):
     keyboard = InlineKeyboardMarkup(row_width=1)
+    currency = get_user_currency(user_id)
+    
     for key, product in PRODUCTS.items():
         if product["category"] == category:
             leet_name = censor_drugs(product['name'])
+            price_in_currency = convert_price(product['price'], currency)
+            price_str = format_price(price_in_currency, currency)
             keyboard.add(InlineKeyboardButton(
-                text=f"{product['emoji']} {leet_name} - {product['price']} GRAM",
+                text=f"{product['emoji']} {leet_name} - {price_str} {currency}",
                 callback_data=f"product_{key}"
             ))
-    keyboard.add(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_categories"))
-    return keyboard
-
-def get_currency_keyboard(product_key: str):
-    keyboard = InlineKeyboardMarkup(row_width=1)
-    for currency, data in CRYPTO_WALLETS.items():
-        keyboard.add(InlineKeyboardButton(
-            text=f"{data['emoji']} {currency} ({data['network']})",
-            callback_data=f"pay_{product_key}_{currency}"
-        ))
     keyboard.add(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_categories"))
     return keyboard
 
@@ -237,6 +324,7 @@ def auto_register(user_id: int):
             "total_purchases": 0,
             "ticket": None,
             "in_chat": False,
+            "currency": "GRAM",
             "ref_code": hashlib.md5(str(user_id).encode()).hexdigest()[:8],
             "invited_users": 0
         }
@@ -304,15 +392,45 @@ async def cmd_start(message: Message, state: FSMContext):
         await message.answer("Вы находитесь в активном чате с продавцом.")
         return
     
+    currency = get_user_currency(user_id)
+    
     welcome_text = (
-        "Привет, это бот для покупок.\n"
-        "Здесь есть ассортимент товаров по разным категориям.\n"
-        "После выбора товара создается тикет, и вы общаетесь с продавцом напрямую.\n"
-        "Оплата доступна в GRAM, USDT (TRC20) и BTC.\n"
-        "Всех благ и хороших покупок."
+        f"Привет, это бот для покупок.\n"
+        f"Здесь есть ассортимент товаров по разным категориям.\n"
+        f"После выбора товара создается тикет, и вы общаетесь с продавцом напрямую.\n"
+        f"Все цены отображаются в валюте: {currency}\n"
+        f"Вы можете сменить валюту через кнопку '💱 Выбрать валюту'.\n"
+        f"Всех благ и хороших покупок."
     )
     await message.answer(welcome_text, reply_markup=get_main_keyboard())
     await state.finish()
+
+@dp.callback_query_handler(lambda c: c.data == "change_currency")
+async def handle_change_currency(callback: CallbackQuery):
+    await callback.message.edit_text(
+        "💱 Выберите валюту для отображения цен:\n\n"
+        "Все цены будут пересчитаны автоматически.",
+        reply_markup=get_currency_keyboard()
+    )
+    await callback.answer()
+
+@dp.callback_query_handler(lambda c: c.data.startswith("set_currency_"))
+async def handle_set_currency(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    currency = callback.data.split("_")[2]
+    
+    set_user_currency(user_id, currency)
+    await callback.answer(f"✅ Валюта изменена на {currency}")
+    
+    welcome_text = (
+        f"Привет, это бот для покупок.\n"
+        f"Здесь есть ассортимент товаров по разным категориям.\n"
+        f"После выбора товара создается тикет, и вы общаетесь с продавцом напрямую.\n"
+        f"Все цены отображаются в валюте: {currency}\n"
+        f"Вы можете сменить валюту через кнопку '💱 Выбрать валюту'.\n"
+        f"Всех благ и хороших покупок."
+    )
+    await callback.message.edit_text(welcome_text, reply_markup=get_main_keyboard())
 
 @dp.callback_query_handler(lambda c: c.data == "buy")
 async def handle_buy(callback: CallbackQuery, state: FSMContext):
@@ -323,7 +441,10 @@ async def handle_buy(callback: CallbackQuery, state: FSMContext):
         await callback.answer("⚠️ У вас активен кулдаун!", show_alert=True)
         return
     
-    await callback.message.edit_text("Выберите категорию:", reply_markup=get_categories_keyboard())
+    await callback.message.edit_text(
+        "Выберите категорию:",
+        reply_markup=get_categories_keyboard(user_id)
+    )
     await callback.answer()
     await state.set_state(PurchaseStates.selecting_category)
 
@@ -333,15 +454,17 @@ async def handle_profile(callback: CallbackQuery):
     auto_register(user_id)
     
     data = user_data.get(user_id, {"purchases_today": 0, "total_purchases": 0, "balance": 0})
+    currency = get_user_currency(user_id)
     
     profile_text = (
         f"👤 Ваш профиль:\n"
         f"━━━━━━━━━━━━━━━━\n"
         f"📦 Покупки сегодня: {data.get('purchases_today', 0)}/2\n"
         f"🔄 Всего покупок: {data.get('total_purchases', 0)}\n"
-        f"💰 Баланс: {data.get('balance', 0):.2f} GRAM\n"
+        f"💰 Баланс: {data.get('balance', 0):.2f} {currency}\n"
         f"👥 Приглашено: {data.get('invited_users', 0)}\n"
         f"🆔 ID: {user_id}\n"
+        f"💱 Валюта: {currency}\n"
         f"━━━━━━━━━━━━━━━━"
     )
     
@@ -375,12 +498,15 @@ async def handle_back_to_main(callback: CallbackQuery, state: FSMContext):
         await callback.answer("⚠️ Вы не можете выйти из чата!", show_alert=True)
         return
     
+    currency = get_user_currency(user_id)
+    
     welcome_text = (
-        "Привет, это бот для покупок.\n"
-        "Здесь есть ассортимент товаров по разным категориям.\n"
-        "После выбора товара создается тикет, и вы общаетесь с продавцом напрямую.\n"
-        "Оплата доступна в GRAM, USDT (TRC20) и BTC.\n"
-        "Всех благ и хороших покупок."
+        f"Привет, это бот для покупок.\n"
+        f"Здесь есть ассортимент товаров по разным категориям.\n"
+        f"После выбора товара создается тикет, и вы общаетесь с продавцом напрямую.\n"
+        f"Все цены отображаются в валюте: {currency}\n"
+        f"Вы можете сменить валюту через кнопку '💱 Выбрать валюту'.\n"
+        f"Всех благ и хороших покупок."
     )
     await callback.message.edit_text(welcome_text, reply_markup=get_main_keyboard())
     await state.finish()
@@ -388,11 +514,16 @@ async def handle_back_to_main(callback: CallbackQuery, state: FSMContext):
 
 @dp.callback_query_handler(lambda c: c.data == "back_to_categories")
 async def handle_back_to_categories(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("Выберите категорию:", reply_markup=get_categories_keyboard())
+    user_id = callback.from_user.id
+    await callback.message.edit_text(
+        "Выберите категорию:",
+        reply_markup=get_categories_keyboard(user_id)
+    )
     await callback.answer()
 
 @dp.callback_query_handler(lambda c: c.data.startswith("category_"))
 async def handle_category(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     category = callback.data.split("_")[1]
     category_map = {
         "salt": "соль", 
@@ -407,17 +538,19 @@ async def handle_category(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text(
         f"Выберите продукт из категории '{censored_category}':",
-        reply_markup=get_products_keyboard(category_name)
+        reply_markup=get_products_keyboard(category_name, user_id)
     )
     await callback.answer()
 
 # ============================================
-# ВЫБОР ТОВАРА → ВАЛЮТА
+# ВЫБОР ТОВАРА → СОЗДАНИЕ ТИКЕТА
 # ============================================
 
 @dp.callback_query_handler(lambda c: c.data.startswith("product_"))
 async def handle_product(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
+    auto_register(user_id)
+    
     product_key = callback.data.split("_")[1]
     product = PRODUCTS.get(product_key)
     
@@ -429,43 +562,13 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
         await callback.answer("⚠️ У вас активен кулдаун!", show_alert=True)
         return
     
-    leet_name = censor_drugs(product['name'])
-    
-    await callback.message.edit_text(
-        f"Вы выбрали: {product['emoji']} {leet_name}\n"
-        f"💰 Цена: {product['price']} GRAM\n\n"
-        f"Выберите способ оплаты:",
-        reply_markup=get_currency_keyboard(product_key)
-    )
-    await callback.answer()
-
-# ============================================
-# ВЫБОР ВАЛЮТЫ → СОЗДАНИЕ ТИКЕТА
-# ============================================
-
-@dp.callback_query_handler(lambda c: c.data.startswith("pay_"))
-async def handle_payment_method(callback: CallbackQuery, state: FSMContext):
-    user_id = callback.from_user.id
-    data = callback.data.split("_")
-    product_key = data[1]
-    currency = data[2]
-    
-    product = PRODUCTS.get(product_key)
-    if not product:
-        await callback.answer("Товар не найден!", show_alert=True)
-        return
-    
-    wallet = CRYPTO_WALLETS.get(currency)
-    if not wallet:
-        await callback.answer("Способ оплаты не найден!", show_alert=True)
-        return
-    
     if not check_purchase_limit(user_id):
         await callback.answer("❌ Достигнут лимит покупок на сегодня!", show_alert=True)
         return
     
     # Создаём тикет
     ticket_number = random.randint(1, 150000)
+    currency = get_user_currency(user_id)
     
     if user_id not in user_data:
         user_data[user_id] = {"purchases_today": 0, "total_purchases": 0, "balance": 0}
@@ -480,10 +583,16 @@ async def handle_payment_method(callback: CallbackQuery, state: FSMContext):
     else:
         user_data[user_id]["cooldown_until"] = datetime.now() + timedelta(hours=5)
     
+    price_in_gram = product['price']
+    price_in_currency = convert_price(price_in_gram, currency)
+    price_str = format_price(price_in_currency, currency)
+    
+    wallet = CRYPTO_WALLETS.get(currency)
+    
     active_tickets[ticket_number] = {
         "user_id": user_id,
         "product": product["name"],
-        "price": product["price"],
+        "price": price_in_gram,
         "currency": currency,
         "created_at": datetime.now()
     }
@@ -496,9 +605,9 @@ async def handle_payment_method(callback: CallbackQuery, state: FSMContext):
         f"✅ Вы выбрали {product['emoji']} {leet_name}!\n"
         f"━━━━━━━━━━━━━━━━\n"
         f"🎫 Ваш тикет создан! #{ticket_number}\n"
-        f"💰 Стоимость: {product['price']} GRAM\n"
-        f"💳 Валюта: {currency} ({wallet['network']})\n"
+        f"💰 Стоимость: {price_str} {currency}\n"
         f"📤 Кошелёк: `{wallet['address']}`\n"
+        f"📡 Сеть: {wallet['network']}\n"
         f"━━━━━━━━━━━━━━━━\n"
         f"⏳ Переведите точную сумму и ожидайте, продавец свяжется с вами!",
         parse_mode="Markdown"
@@ -510,8 +619,7 @@ async def handle_payment_method(callback: CallbackQuery, state: FSMContext):
         f"🎫 Тикет: #{ticket_number}\n"
         f"👤 Пользователь: {user_id}\n"
         f"📦 Товар: {product['name']}\n"
-        f"💰 Сумма: {product['price']} GRAM\n"
-        f"💳 Валюта: {currency}\n"
+        f"💰 Сумма: {price_str} {currency}\n"
         f"━━━━━━━━━━━━━━━━\n"
         f"Ожидает принятия!"
     )
@@ -525,13 +633,11 @@ async def handle_payment_method(callback: CallbackQuery, state: FSMContext):
     await callback.answer("✅ Тикет создан!")
 
 # ============================================
-# АДМИН
+# АДМИН (С БАЗОЙ ДАННЫХ)
 # ============================================
 
 @dp.callback_query_handler(lambda c: c.data.startswith("accept_ticket_"))
 async def handle_accept_ticket(callback: CallbackQuery):
-    global current_admin_chat, current_admin_user
-    
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("❌ Нет доступа!", show_alert=True)
         return
@@ -542,15 +648,17 @@ async def handle_accept_ticket(callback: CallbackQuery):
         await callback.answer("❌ Тикет не найден!", show_alert=True)
         return
     
-    if current_admin_chat is not None:
-        await callback.answer(f"❌ Активен чат #{current_admin_chat}!", show_alert=True)
+    # Проверяем, есть ли уже активный чат
+    current = get_active_chat(ADMIN_ID)
+    if current:
+        await callback.answer(f"❌ Активен чат #{current['ticket_number']}!", show_alert=True)
         return
     
     ticket = active_tickets[ticket_number]
     user_id = ticket["user_id"]
     
-    current_admin_chat = ticket_number
-    current_admin_user = user_id
+    # СОХРАНЯЕМ В БАЗУ
+    save_active_chat(ADMIN_ID, ticket_number, user_id)
     
     if user_id in user_data:
         user_data[user_id]["in_chat"] = True
@@ -578,15 +686,15 @@ async def handle_accept_ticket(callback: CallbackQuery):
 
 @dp.callback_query_handler(lambda c: c.data.startswith("close_ticket_"))
 async def handle_close_ticket(callback: CallbackQuery):
-    global current_admin_chat, current_admin_user
-    
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("❌ Нет доступа!", show_alert=True)
         return
     
     ticket_number = int(callback.data.split("_")[2])
     
-    if current_admin_chat != ticket_number:
+    # Проверяем, что это активный чат
+    current = get_active_chat(ADMIN_ID)
+    if not current or current['ticket_number'] != ticket_number:
         await callback.answer("❌ Тикет не активен!", show_alert=True)
         return
     
@@ -612,8 +720,8 @@ async def handle_close_ticket(callback: CallbackQuery):
     
     del active_tickets[ticket_number]
     
-    current_admin_chat = None
-    current_admin_user = None
+    # УДАЛЯЕМ ИЗ БАЗЫ
+    clear_active_chat(ADMIN_ID)
     
     try:
         await bot.delete_message(chat_id=ADMIN_ID, message_id=callback.message.message_id)
@@ -639,16 +747,16 @@ async def handle_close_ticket(callback: CallbackQuery):
 
 @dp.message_handler(content_types=['text'])
 async def handle_all_text_messages(message: Message, state: FSMContext):
-    global current_admin_chat, current_admin_user
-    
     user_id = message.from_user.id
     text = message.text
     
     if user_id == ADMIN_ID:
-        if current_admin_chat is not None and current_admin_chat in active_tickets:
+        # Проверяем активный чат из БАЗЫ
+        current = get_active_chat(ADMIN_ID)
+        if current and current['ticket_number'] in active_tickets:
             try:
-                await bot.send_message(current_admin_user, f"🛒 Продавец: {text}")
-                await message.answer(f"✅ Отправлено (тикет #{current_admin_chat})")
+                await bot.send_message(current['user_id'], f"🛒 Продавец: {text}")
+                await message.answer(f"✅ Отправлено (тикет #{current['ticket_number']})")
                 return
             except Exception as e:
                 logger.error(f"Ошибка отправки админом: {e}")
