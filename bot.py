@@ -569,9 +569,10 @@ async def handle_product(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Достигнут лимит покупок на сегодня!", show_alert=True)
         return
     
+    currency = get_user_currency(user_id)
+    
     # Создаём тикет
     ticket_number = random.randint(1, 150000)
-    currency = get_user_currency(user_id)
     
     if user_id not in user_data:
         user_data[user_id] = {"purchases_today": 0, "total_purchases": 0, "balance": 0}
