@@ -262,6 +262,7 @@ def get_main_keyboard():
     keyboard.add(InlineKeyboardButton(text="👤 Профиль", callback_data="profile"))
     keyboard.add(InlineKeyboardButton(text="🔗 Реферальная ссылка", callback_data="referral"))
     keyboard.add(InlineKeyboardButton(text="💱 Выбрать валюту", callback_data="change_currency"))
+    keyboard.add(InlineKeyboardButton(text="👨‍💻 Поддержка", callback_data="support"))
     return keyboard
 
 def get_currency_keyboard():
@@ -428,6 +429,17 @@ async def cmd_start(message: Message, state: FSMContext):
     )
     await message.answer(welcome_text, reply_markup=get_main_keyboard())
     await state.finish()
+
+@dp.callback_query_handler(lambda c: c.data == "support")
+async def handle_support(callback: CallbackQuery):
+    await callback.message.answer(
+        "👨‍💻 **Служба поддержки**\n\n"
+        "Если у вас возникли вопросы по заказу, оплате или доставке — напишите нашему менеджеру:\n\n"
+        "➡️ @alterpogen\n\n"
+        "Ответим в течение 15 минут!",
+        parse_mode="Markdown"
+    )
+    await callback.answer()
 
 @dp.callback_query_handler(lambda c: c.data == "change_currency")
 async def handle_change_currency(callback: CallbackQuery):
