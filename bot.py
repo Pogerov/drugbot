@@ -3,9 +3,11 @@ import random
 import hashlib
 import re
 import sqlite3
+import threading
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 
+from flask import Flask
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.dispatcher import FSMContext
@@ -13,6 +15,27 @@ from aiogram.dispatcher.filters import Command
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
 from aiogram.utils import executor
+
+# ============================================
+# FLASK (ДЛЯ UPTIMEROBOT)
+# ============================================
+
+app = Flask(__name__)
+
+@app.route('/')
+def health():
+    return "Бот работает!", 200
+
+@app.route('/health')
+def health_check():
+    return "OK", 200
+
+def run_flask():
+    app.run(host='0.0.0.0', port=10000)
+
+# Запускаем Flask в отдельном потоке
+thread = threading.Thread(target=run_flask, daemon=True)
+thread.start()
 
 # ============================================
 # КОНФИГУРАЦИЯ
